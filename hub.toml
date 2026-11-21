@@ -1,0 +1,64 @@
+# Hub manifest — sibling sub-projects coordinated by this hub.
+# Edit member roles, summaries, or produces/consumes here, then run:
+#   project-pattern hub sync
+
+[hub]
+name = "Open Data Analysis"
+orca_group = "Open Data Analysis"
+orca_group_id = "2fd93fa6-c85e-49d7-9c2e-d0860f7df332"
+delegation = "hybrid"
+
+[[members]]
+id = "campaigns-discovery"
+name = "campaigns discovery"
+path = "/home/user/orca/projects/campaigns discovery"
+orca_repo = "campaigns discovery"
+role = "intelligence"
+delegation = "hybrid"
+summary = "Affiliate & advertising intelligence (Meta Ad Library, Affplus, OpenAffiliate, BestAffiliatePrograms) with PostgreSQL on localhost:55432 and CSV/Markdown exports."
+produces = ["PostgreSQL localhost:55432 (data/postgres)", "exports/*.csv, exports/*.md, exports/database-final.dump", "data/raw/"]
+consumes = ["audiences (currently via symlink audiences -> ../audiences)"]
+
+[[members]]
+id = "audiences"
+name = "audiences"
+path = "/home/user/orca/projects/audiences"
+orca_repo = "audiences"
+role = "dataset"
+delegation = "hybrid"
+summary = "Underserved paying-audience ranking (NAICS, QCEW, NTEE, IRS BMF, USPTO trademarks, OEWS) governed by hashed protocol.md."
+produces = ["data/interim/*.parquet (naics_*, qcew, segment_metrics, tm_software, tm_matches, phrase_counts)", "out/v3_ranking.csv, out/v3_audiences.csv, out/segments.csv, out/spain_overlay.csv, out/report_v3.md"]
+consumes = []
+
+[[members]]
+id = "opendata"
+name = "opendata"
+path = "/home/user/orca/projects/opendata"
+orca_repo = "opendata"
+role = "collector"
+delegation = "hybrid"
+summary = "Scheduled open-data niche collectors (OpenRouter rankings/models, EU App Store charts/reviews, TrustMRR, Google Trends RSS, CT logs) with DuckDB SQL views."
+produces = ["uv run opendata sql (appstore_charts, reviews, openrouter, trustmrr, gtrends, ct new_domains)", "data/catalog.json & OPENDATA_DATA_DIR parsed datasets", "config.yaml"]
+consumes = []
+
+[[members]]
+id = "ai-catalogs"
+name = "ai-catalogs"
+path = "/home/user/orca/projects/ai-catalogs"
+orca_repo = "ai-catalogs"
+role = "catalog"
+delegation = "coordinator"
+summary = "AI catalogs & directories analysis (uses coordinator@1.2.0 pattern)."
+produces = ["docs/PLAN.md, docs/reports/"]
+consumes = []
+
+[[members]]
+id = "vistomi"
+name = "vistomi"
+path = "/home/user/orca/projects/vistomi"
+orca_repo = "vistomi"
+role = "product"
+delegation = "hybrid"
+summary = "AI visibility & recommendation analytics product for European businesses (ChatGPT/Gemini/Perplexity recommendations & sources)."
+produces = ["docs/product-spec.md, docs/market-europe.md, docs/competitors.md, docs/dashboard.md", "design/, landing/"]
+consumes = ["cross-project market, audience, ad-spend, and AI-catalog signals"]

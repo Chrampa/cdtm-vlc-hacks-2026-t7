@@ -1,0 +1,8 @@
+# Work pattern of this project, managed by project-pattern.
+# Change vars here, then run: project-pattern sync
+pattern = "hub"
+version = "1.0.0"
+
+[vars]
+hub_name = "Open Data Analysis"
+orca_group = "Open Data Analysis"
