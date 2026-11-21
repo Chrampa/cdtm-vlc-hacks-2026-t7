@@ -1,0 +1,40 @@
+/* Scoped design tokens for the five directions. Each screen only uses --v-* variables. */
+.v-dossier {
+  --v-bg: #FAF8F4; --v-surface: #FFFFFF; --v-surface2: #F3F0EA; --v-ink: #1B1B1F; --v-ink2: #5A5B61; --v-line: #E6E0D5;
+  --v-accent: #2346C9; --v-accent-soft: #E9EDFB; --v-on-accent: #FFFFFF;
+  --v-good: #1D7A4B; --v-good-soft: #E6F3EC; --v-warn: #9A5B12; --v-warn-soft: #FBF0DF; --v-bad: #B3372B; --v-bad-soft: #F9E7E4;
+  --v-mark: #FFF1C2; --v-radius: 6px;
+  --v-display: "Newsreader", Georgia, serif; --v-body: "IBM Plex Sans", system-ui, sans-serif; --v-num: "Newsreader", Georgia, serif;
+}
+.v-console {
+  --v-bg: #F4F5F7; --v-surface: #FFFFFF; --v-surface2: #F8F9FA; --v-ink: #0E1116; --v-ink2: #5B6472; --v-line: #E2E5EA;
+  --v-accent: #3651D4; --v-accent-soft: #ECEFFC; --v-on-accent: #FFFFFF;
+  --v-good: #1F8A3B; --v-good-soft: #E7F5EA; --v-warn: #B45F06; --v-warn-soft: #FDF1E1; --v-bad: #C92A2A; --v-bad-soft: #FBE9E9;
+  --v-rail: #0F1218; --v-radius: 6px;
+  --v-display: "Inter", system-ui, sans-serif; --v-body: "Inter", system-ui, sans-serif; --v-num: "JetBrains Mono", ui-monospace, monospace;
+}
+.v-people {
+  --v-bg: #F6F3EE; --v-surface: #FFFFFF; --v-surface2: #FBF9F6; --v-ink: #1F2328; --v-ink2: #626A73; --v-line: #EAE4DA;
+  --v-accent: #0E7C6B; --v-accent-soft: #E2F3EF; --v-on-accent: #FFFFFF;
+  --v-good: #0E7C6B; --v-good-soft: #E2F3EF; --v-warn: #A4541A; --v-warn-soft: #FCEBDD; --v-bad: #B9442A; --v-bad-soft: #FBE6DF;
+  --v-sun: #F2B84B; --v-sun-soft: #FDF3DC; --v-radius: 18px;
+  --v-display: "Plus Jakarta Sans", system-ui, sans-serif; --v-body: "Plus Jakarta Sans", system-ui, sans-serif; --v-num: "Plus Jakarta Sans", system-ui, sans-serif;
+}
+.v-spotlight {
+  --v-bg: #0A1022; --v-surface: #111A33; --v-surface2: #18233F; --v-ink: #F2F5FF; --v-ink2: #A6B0CF; --v-line: #25305A;
+  --v-accent: #6E98FF; --v-accent-soft: #1B2B57; --v-on-accent: #06102A;
+  --v-good: #41D89A; --v-good-soft: #11392E; --v-warn: #FFB547; --v-warn-soft: #3A2C12; --v-bad: #FF7A8A; --v-bad-soft: #3D1823;
+  --v-radius: 14px;
+  --v-display: "Space Grotesk", system-ui, sans-serif; --v-body: "Inter", system-ui, sans-serif; --v-num: "Space Grotesk", system-ui, sans-serif;
+}
+.v-matrix {
+  --v-bg: #FFFFFF; --v-surface: #FFFFFF; --v-surface2: #F5F5F4; --v-ink: #111111; --v-ink2: #6B6B6B; --v-line: #E6E6E6;
+  --v-accent: #FF4F12; --v-accent-ink: #C2380A; --v-accent-soft: #FFF0EA; --v-on-accent: #FFFFFF;
+  --v-good: #0F7A55; --v-good-soft: #E6F4EE; --v-warn: #A35A00; --v-warn-soft: #FBF1E2; --v-bad: #B42318; --v-bad-soft: #FDECEA;
+  --v-radius: 0px;
+  --v-display: "Inter Tight", system-ui, sans-serif; --v-body: "Inter Tight", system-ui, sans-serif; --v-num: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.v-frame { background: var(--v-bg); color: var(--v-ink); font-family: var(--v-body); font-variant-numeric: tabular-nums; }
+.v-display { font-family: var(--v-display); }
+.v-num { font-family: var(--v-num); font-variant-numeric: tabular-nums; }

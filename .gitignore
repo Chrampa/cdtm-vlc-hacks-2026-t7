@@ -233,3 +233,10 @@ tmp/
 out/
 docs/reports/*_data/
 .env.local
+
+# --- Talent Matcher ---
+data/*.parquet
+web/node_modules/
+web/dist/
+.run/
+*.tsbuildinfo

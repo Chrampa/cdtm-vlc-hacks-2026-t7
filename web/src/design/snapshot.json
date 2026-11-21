@@ -1,0 +1,796 @@
+{
+ "brief": "We need a Data Engineer with GCP experience to build BigQuery data pipelines for an insurance client. Should be able to start within the next couple of months.",
+ "title": "Data Engineer (GCP / BigQuery) for Insurance Client",
+ "summary": "One Data Engineer with Google Cloud Platform experience to build BigQuery data pipelines for an insurance client, able to start within the next couple of months.",
+ "role_title": "Data Engineer (GCP / BigQuery)",
+ "availability": "soon",
+ "requirements": [
+  {
+   "label": "GCP data engineering",
+   "importance": "must",
+   "implicit": false,
+   "reason": null,
+   "means": [
+    "Google Cloud",
+    "BigQuery",
+    "Cloud Run",
+    "GKE",
+    "Terraform"
+   ]
+  },
+  {
+   "label": "BigQuery pipeline development",
+   "importance": "must",
+   "implicit": false,
+   "reason": null,
+   "means": [
+    "BigQuery",
+    "ETL/ELT",
+    "SQL",
+    "Airflow",
+    "dbt"
+   ]
+  },
+  {
+   "label": "Data pipeline engineering",
+   "importance": "must",
+   "implicit": false,
+   "reason": null,
+   "means": [
+    "ETL/ELT",
+    "Python",
+    "Spark",
+    "Airflow",
+    "Kafka"
+   ]
+  },
+  {
+   "label": "Insurance sector experience",
+   "importance": "must",
+   "implicit": true,
+   "reason": "Client is an insurance company; domain knowledge needed for pipelines",
+   "means": []
+  }
+ ],
+ "funnel": [
+  {
+   "label": "Whole workforce",
+   "count": 190000
+  },
+  {
+   "label": "Available within 3 months",
+   "count": 34003
+  }
+ ],
+ "keyword": {
+  "terms": [
+   "GCP",
+   "BigQuery",
+   "pipelines"
+  ],
+  "count": 0,
+  "missed_in_top": 8
+ },
+ "total_shown": 8,
+ "candidates": [
+  {
+   "employee_id": "NTT0168063",
+   "name": "Jorge Salcedo Alonso",
+   "position": "Principal Analytics Engineer",
+   "role": "Analytics Engineer",
+   "area": "Data & AI",
+   "location": "Querétaro, Mexico",
+   "availability": "Free in < 3 months",
+   "availability_code": 1,
+   "years": 16,
+   "seniority": "Principal",
+   "fit": 83,
+   "must_covered": 3,
+   "must_total": 4,
+   "other_team": true,
+   "keyword_hit": false,
+   "sector": "Insurance",
+   "strengths": [
+    "BigQuery pipeline development: BigQuery — level 4/5, 16 years, used in 1 job",
+    "Insurance sector experience: Main sector is Insurance",
+    "GCP data engineering: BigQuery — level 4/5, 16 years, used in 1 job"
+   ],
+   "gaps": [
+    "Partly shown — Data pipeline engineering"
+   ],
+   "requirements": [
+    {
+     "label": "GCP data engineering",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 4/5, 16 years, used in 1 job"
+    },
+    {
+     "label": "BigQuery pipeline development",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 4/5, 16 years, used in 1 job"
+    },
+    {
+     "label": "Data pipeline engineering",
+     "importance": "must",
+     "status": "partial",
+     "line": "Python — level 4/5, 10.5 years, used in 1 project and 4 jobs (related match)"
+    },
+    {
+     "label": "Insurance sector experience",
+     "importance": "must",
+     "status": "covered",
+     "line": "Main sector is Insurance"
+    }
+   ],
+   "risks": [
+    "Still on another project — frees up within 3 months",
+    "Data pipeline engineering: only related experience (Python)"
+   ]
+  },
+  {
+   "employee_id": "NTT0095734",
+   "name": "Abilio Tejedor Andrade",
+   "position": "Senior Cloud Engineer (GCP)",
+   "role": "Cloud Engineer (GCP)",
+   "area": "Cloud & Infraestructura",
+   "location": "Barcelona, Spain",
+   "availability": "Available now",
+   "availability_code": 0,
+   "years": 9,
+   "seniority": "Senior",
+   "fit": 81,
+   "must_covered": 3,
+   "must_total": 4,
+   "other_team": true,
+   "keyword_hit": false,
+   "sector": "Insurance",
+   "strengths": [
+    "GCP data engineering: Google Cloud — level 5/5, 6 years, used in 1 project and 2 jobs",
+    "BigQuery pipeline development: BigQuery — level 5/5, 4 years, used in 1 job",
+    "Insurance sector experience: Main sector is Insurance"
+   ],
+   "gaps": [
+    "Partly shown — Data pipeline engineering"
+   ],
+   "requirements": [
+    {
+     "label": "GCP data engineering",
+     "importance": "must",
+     "status": "covered",
+     "line": "Google Cloud — level 5/5, 6 years, used in 1 project and 2 jobs"
+    },
+    {
+     "label": "BigQuery pipeline development",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 5/5, 4 years, used in 1 job"
+    },
+    {
+     "label": "Data pipeline engineering",
+     "importance": "must",
+     "status": "partial",
+     "line": "Python — level 3/5, 3 years, used in 1 job (related match)"
+    },
+    {
+     "label": "Insurance sector experience",
+     "importance": "must",
+     "status": "covered",
+     "line": "Main sector is Insurance"
+    }
+   ],
+   "risks": [
+    "Data pipeline engineering: only related experience (Python)"
+   ]
+  },
+  {
+   "employee_id": "NTT0140139",
+   "name": "Angelina Manzanares Somoza",
+   "position": "Lead Analytics Engineer",
+   "role": "Analytics Engineer",
+   "area": "Data & AI",
+   "location": "Madrid, Spain",
+   "availability": "Free in < 3 months",
+   "availability_code": 1,
+   "years": 11,
+   "seniority": "Lead",
+   "fit": 81,
+   "must_covered": 3,
+   "must_total": 4,
+   "other_team": true,
+   "keyword_hit": false,
+   "sector": "Insurance",
+   "strengths": [
+    "Insurance sector experience: Main sector is Insurance",
+    "BigQuery pipeline development: BigQuery — level 3/5, 6 years, used in 2 projects and 2 jobs",
+    "GCP data engineering: BigQuery — level 3/5, 6 years, used in 2 projects and 2 jobs"
+   ],
+   "gaps": [
+    "Partly shown — Data pipeline engineering"
+   ],
+   "requirements": [
+    {
+     "label": "GCP data engineering",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 3/5, 6 years, used in 2 projects and 2 jobs"
+    },
+    {
+     "label": "BigQuery pipeline development",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 3/5, 6 years, used in 2 projects and 2 jobs"
+    },
+    {
+     "label": "Data pipeline engineering",
+     "importance": "must",
+     "status": "partial",
+     "line": "Airflow — level 5/5, 7.5 years, used in 2 projects (related match)"
+    },
+    {
+     "label": "Insurance sector experience",
+     "importance": "must",
+     "status": "covered",
+     "line": "Main sector is Insurance"
+    }
+   ],
+   "risks": [
+    "Still on another project — frees up within 3 months",
+    "Data pipeline engineering: only related experience (Airflow)"
+   ]
+  },
+  {
+   "employee_id": "NTT0126936",
+   "name": "Pablo Leiva Porras",
+   "position": "Principal Cloud Engineer (GCP)",
+   "role": "Cloud Engineer (GCP)",
+   "area": "Cloud & Infraestructura",
+   "location": "Querétaro, Mexico",
+   "availability": "Free in < 3 months",
+   "availability_code": 1,
+   "years": 20,
+   "seniority": "Principal",
+   "fit": 81,
+   "must_covered": 3,
+   "must_total": 4,
+   "other_team": true,
+   "keyword_hit": false,
+   "sector": "Insurance",
+   "strengths": [
+    "GCP data engineering: BigQuery — level 4/5, 14 years, used in 3 projects and 4 jobs",
+    "Insurance sector experience: Main sector is Insurance",
+    "BigQuery pipeline development: BigQuery — level 4/5, 14 years, used in 3 projects and 4 jobs"
+   ],
+   "gaps": [
+    "Partly shown — Data pipeline engineering"
+   ],
+   "requirements": [
+    {
+     "label": "GCP data engineering",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 4/5, 14 years, used in 3 projects and 4 jobs"
+    },
+    {
+     "label": "BigQuery pipeline development",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 4/5, 14 years, used in 3 projects and 4 jobs"
+    },
+    {
+     "label": "Data pipeline engineering",
+     "importance": "must",
+     "status": "partial",
+     "line": "Python — level 3/5, 18.5 years, used in 2 projects and 3 jobs (related match)"
+    },
+    {
+     "label": "Insurance sector experience",
+     "importance": "must",
+     "status": "covered",
+     "line": "Main sector is Insurance"
+    }
+   ],
+   "risks": [
+    "Still on another project — frees up within 3 months",
+    "Data pipeline engineering: only related experience (Python)"
+   ]
+  },
+  {
+   "employee_id": "NTT0068892",
+   "name": "Jesús Montes Tovar",
+   "position": "Lead Analytics Engineer",
+   "role": "Analytics Engineer",
+   "area": "Data & AI",
+   "location": "Monterrey, Mexico",
+   "availability": "Available now",
+   "availability_code": 0,
+   "years": 12,
+   "seniority": "Lead",
+   "fit": 80,
+   "must_covered": 3,
+   "must_total": 4,
+   "other_team": true,
+   "keyword_hit": false,
+   "sector": "Insurance",
+   "strengths": [
+    "Insurance sector experience: Main sector is Insurance",
+    "BigQuery pipeline development: BigQuery — level 3/5, 7.5 years, used in 1 job",
+    "GCP data engineering: BigQuery — level 3/5, 7.5 years, used in 1 job"
+   ],
+   "gaps": [
+    "Partly shown — Data pipeline engineering"
+   ],
+   "requirements": [
+    {
+     "label": "GCP data engineering",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 3/5, 7.5 years, used in 1 job"
+    },
+    {
+     "label": "BigQuery pipeline development",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 3/5, 7.5 years, used in 1 job"
+    },
+    {
+     "label": "Data pipeline engineering",
+     "importance": "must",
+     "status": "partial",
+     "line": "Python — level 4/5, 8 years, used in 1 job (related match)"
+    },
+    {
+     "label": "Insurance sector experience",
+     "importance": "must",
+     "status": "covered",
+     "line": "Main sector is Insurance"
+    }
+   ],
+   "risks": [
+    "Data pipeline engineering: only related experience (Python)"
+   ]
+  },
+  {
+   "employee_id": "NTT0187504",
+   "name": "Samuel Sastre Mosquera",
+   "position": "Senior Cloud Engineer (GCP)",
+   "role": "Cloud Engineer (GCP)",
+   "area": "Cloud & Infraestructura",
+   "location": "Barcelona, Spain",
+   "availability": "Free in < 3 months",
+   "availability_code": 1,
+   "years": 6,
+   "seniority": "Senior",
+   "fit": 79,
+   "must_covered": 3,
+   "must_total": 4,
+   "other_team": true,
+   "keyword_hit": false,
+   "sector": "Insurance",
+   "strengths": [
+    "Insurance sector experience: Main sector is Insurance",
+    "GCP data engineering: Cloud Run — level 4/5, 5.5 years, used in 3 jobs (equivalent match)",
+    "BigQuery pipeline development: BigQuery — level 3/5, 2.5 years, used in 1 job"
+   ],
+   "gaps": [
+    "Partly shown — Data pipeline engineering"
+   ],
+   "requirements": [
+    {
+     "label": "GCP data engineering",
+     "importance": "must",
+     "status": "covered",
+     "line": "Cloud Run — level 4/5, 5.5 years, used in 3 jobs (equivalent match)"
+    },
+    {
+     "label": "BigQuery pipeline development",
+     "importance": "must",
+     "status": "covered",
+     "line": "BigQuery — level 3/5, 2.5 years, used in 1 job"
+    },
+    {
+     "label": "Data pipeline engineering",
+     "importance": "must",
+     "status": "partial",
+     "line": "Python — level 3/5, 5.5 years, used in 2 projects and 2 jobs (related match)"
+    },
+    {
+     "label": "Insurance sector experience",
+     "importance": "must",
+     "status": "covered",
+     "line": "Main sector is Insurance"
+    }
+   ],
+   "risks": [
+    "Still on another project — frees up within 3 months",
+    "Data pipeline engineering: only related experience (Python)"
+   ]
+  }
+ ],
+ "detail": {
+  "employee_id": "NTT0168063",
+  "evidence": [
+   {
+    "id": "F1",
+    "type": "fact",
+    "text": "Principal Analytics Engineer · Principal · 16 years of experience (1.6 at NTT DATA)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "F2",
+    "type": "fact",
+    "text": "Free in < 3 months · Híbrido",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "F3",
+    "type": "fact",
+    "text": "Based in Querétaro, Mexico",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "F4",
+    "type": "fact",
+    "text": "Main sector: Insurance",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "P1",
+    "type": "project",
+    "text": "Modernización de gestión de siniestros — Insurance client, 2022 (Principal Analytics Engineer)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "X1",
+    "type": "job",
+    "text": "Principal Analytics Engineer at NTT DATA (2025–today)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "X2",
+    "type": "job",
+    "text": "Lead Analytics Engineer at Atos (2023–2025)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "X3",
+    "type": "job",
+    "text": "Lead Analytics Engineer at Utility energética (2020–2023)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "X4",
+    "type": "job",
+    "text": "Lead Analytics Engineer at Amadeus (2017–2020)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "X5",
+    "type": "job",
+    "text": "Senior AI Engineer (GenAI/LLM) at Aseguradora (2013–2017)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "X6",
+    "type": "job",
+    "text": "Analytics Engineer at Infosys (2010–2013)",
+    "name": null,
+    "level": null,
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "S1",
+    "type": "skill",
+    "text": "SQL — level 5/5, 12.5 years, used in 2 jobs",
+    "name": "SQL",
+    "level": 5,
+    "years": 12.5,
+    "used_in": [
+     "X3",
+     "X4"
+    ]
+   },
+   {
+    "id": "S2",
+    "type": "skill",
+    "text": "Modelado dimensional — level 5/5, 9 years, used in 1 project and 3 jobs",
+    "name": "Modelado dimensional",
+    "level": 5,
+    "years": 9.0,
+    "used_in": [
+     "P1",
+     "X4",
+     "X5",
+     "X6"
+    ]
+   },
+   {
+    "id": "S3",
+    "type": "skill",
+    "text": "Looker — level 5/5, 8 years, used in 4 jobs",
+    "name": "Looker",
+    "level": 5,
+    "years": 8.0,
+    "used_in": [
+     "X1",
+     "X2",
+     "X4",
+     "X6"
+    ]
+   },
+   {
+    "id": "S4",
+    "type": "skill",
+    "text": "Git — level 5/5, 6 years, used in 2 jobs",
+    "name": "Git",
+    "level": 5,
+    "years": 6.0,
+    "used_in": [
+     "X3",
+     "X5"
+    ]
+   },
+   {
+    "id": "S5",
+    "type": "skill",
+    "text": "dbt — level 5/5, 3 years, used in 2 jobs",
+    "name": "dbt",
+    "level": 5,
+    "years": 3.0,
+    "used_in": [
+     "X1",
+     "X6"
+    ]
+   },
+   {
+    "id": "S6",
+    "type": "skill",
+    "text": "BigQuery — level 4/5, 16 years, used in 1 job",
+    "name": "BigQuery",
+    "level": 4,
+    "years": 16.0,
+    "used_in": [
+     "X3"
+    ]
+   },
+   {
+    "id": "S7",
+    "type": "skill",
+    "text": "Python — level 4/5, 10.5 years, used in 1 project and 4 jobs",
+    "name": "Python",
+    "level": 4,
+    "years": 10.5,
+    "used_in": [
+     "P1",
+     "X1",
+     "X2",
+     "X3",
+     "X5"
+    ]
+   },
+   {
+    "id": "S8",
+    "type": "skill",
+    "text": "Snowflake — level 4/5, 9 years, used in 3 jobs",
+    "name": "Snowflake",
+    "level": 4,
+    "years": 9.0,
+    "used_in": [
+     "X1",
+     "X5",
+     "X6"
+    ]
+   },
+   {
+    "id": "L1",
+    "type": "language",
+    "text": "Spanish Nativo",
+    "name": "Español",
+    "level": "Nativo",
+    "years": null,
+    "used_in": null
+   },
+   {
+    "id": "L2",
+    "type": "language",
+    "text": "English C1",
+    "name": "Inglés",
+    "level": "C1",
+    "years": null,
+    "used_in": null
+   }
+  ],
+  "requirements": [
+   {
+    "label": "GCP data engineering",
+    "importance": "must",
+    "status": "covered",
+    "lines": [
+     "BigQuery — level 4/5, 16 years, used in 1 job"
+    ],
+    "evidence": [
+     "S6",
+     "X3"
+    ]
+   },
+   {
+    "label": "BigQuery pipeline development",
+    "importance": "must",
+    "status": "covered",
+    "lines": [
+     "BigQuery — level 4/5, 16 years, used in 1 job",
+     "SQL — level 5/5, 12.5 years, used in 2 jobs (related match)",
+     "dbt — level 5/5, 3 years, used in 2 jobs (related match)"
+    ],
+    "evidence": [
+     "S6",
+     "X3",
+     "S1",
+     "X4",
+     "S5",
+     "X1",
+     "X6"
+    ]
+   },
+   {
+    "label": "Data pipeline engineering",
+    "importance": "must",
+    "status": "partial",
+    "lines": [
+     "Python — level 4/5, 10.5 years, used in 1 project and 4 jobs (related match)"
+    ],
+    "evidence": [
+     "S7",
+     "P1",
+     "X1"
+    ]
+   },
+   {
+    "label": "Insurance sector experience",
+    "importance": "must",
+    "status": "covered",
+    "lines": [
+     "Main sector is Insurance",
+     "1 project for Insurance clients (latest 2022)",
+     "Worked at Aseguradora"
+    ],
+    "evidence": [
+     "F4",
+     "P1",
+     "X5"
+    ]
+   }
+  ],
+  "explanation": {
+   "summary": "Jorge covers the core GCP and BigQuery needs, with BigQuery at 4/5 over 16 years [S6] and GCP data engineering covered [S6][X3]. He also brings insurance-sector background, since his main sector is Insurance [F4] and he worked on claims-management modernization for an insurance client in 2022 [P1]. The main gap is \"Data pipeline engineering\", which is only partial [S7][P1][X1], so this should be probed in interview.",
+   "verify": [
+    "Ask for concrete examples of end-to-end data pipeline engineering, since this requirement is only partial and the evidence points to Python at 4/5 over 10.5 years [S7] plus the 2022 insurance claims project [P1].",
+    "Confirm hands-on BigQuery pipeline work at the level claimed, given BigQuery is 4/5 over 16 years but used in only 1 job [S6], and check availability, as he is free in < 3 months [F2]."
+   ],
+   "verdict": "good",
+   "removed": 0
+  },
+  "risks": [
+   "Still on another project — frees up within 3 months",
+   "Data pipeline engineering: only related experience (Python)"
+  ]
+ },
+ "team": {
+  "title": "Core Banking Mainframe-to-Azure Migration Team",
+  "stats": {
+   "slots": 5,
+   "filled": 5,
+   "avg_fit": 76,
+   "greedy_avg_fit": 76,
+   "gain_vs_greedy": 0.0
+  },
+  "roles": [
+   {
+    "title": "Cloud Architect",
+    "count": 1,
+    "people": [
+     {
+      "name": "Alba Zúñiga González",
+      "position": "Lead Cloud Architect",
+      "fit": 69,
+      "availability": "Free in < 3 months",
+      "availability_code": 1,
+      "must": "4/6"
+     }
+    ],
+    "complement": null
+   },
+   {
+    "title": "Mainframe COBOL Developer",
+    "count": 2,
+    "people": [
+     {
+      "name": "Cruz Contreras Palacios",
+      "position": "Lead Mainframe Developer (COBOL)",
+      "fit": 91,
+      "availability": "Free in < 3 months",
+      "availability_code": 1,
+      "must": "3/3"
+     },
+     {
+      "name": "Gonzalo Ávila Rocamora",
+      "position": "Senior Mainframe Developer (COBOL)",
+      "fit": 89,
+      "availability": "Free in < 3 months",
+      "availability_code": 1,
+      "must": "3/3"
+     }
+    ],
+    "complement": null
+   },
+   {
+    "title": "Data Engineer",
+    "count": 1,
+    "people": [
+     {
+      "name": "Ignacio Sobrino Cuevas",
+      "position": "Principal Data Engineer",
+      "fit": 67,
+      "availability": "Available now",
+      "availability_code": 0,
+      "must": "3/4"
+     }
+    ],
+    "complement": {
+     "name": "Pedro Agudelo Prieto",
+     "role": "Mainframe Developer (COBOL)",
+     "covers": [
+      "Mainframe legacy data"
+     ]
+    }
+   },
+   {
+    "title": "Project Manager",
+    "count": 1,
+    "people": [
+     {
+      "name": "Alderano Nolcini",
+      "position": "Lead Project Manager",
+      "fit": 65,
+      "availability": "Available now",
+      "availability_code": 0,
+      "must": "3/4"
+     }
+    ],
+    "complement": null
+   }
+  ]
+ }
+}
