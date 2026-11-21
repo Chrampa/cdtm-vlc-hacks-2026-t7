@@ -683,8 +683,8 @@ export function useMatcher() {
       setSavingProject(true);
       try {
         const snap = currentSnapshot(false);
-        // A confirmed team that is changed again goes back to draft until it is confirmed again.
-        const status = opts?.status ?? (activeProject?.status === "staffed" ? "draft" : undefined);
+        // Once confirmed, a search is a project and stays one; later edits are simply saved into it.
+        const status = opts?.status;
         const updated = await api.projects.update(activeProjectId, {
           ...(status ? { status } : {}),
           brief,
@@ -706,7 +706,7 @@ export function useMatcher() {
         setSavingProject(false);
       }
     },
-    [activeProjectId, activeProject, spec, brief, teamShape, teamOption, currentSnapshot, markClean, flash],
+    [activeProjectId, spec, brief, teamShape, teamOption, currentSnapshot, markClean, flash],
   );
 
   // Autosave edits to the open project shortly after they settle.
@@ -719,8 +719,8 @@ export function useMatcher() {
   }, [activeProjectId, dirty, revTick, phase, refreshing]);
 
   const confirmTeam = useCallback(
-    () => saveCurrentProject({ status: "staffed", message: result?.multi ? "Team confirmed" : "Choice confirmed" }),
-    [saveCurrentProject, result],
+    () => saveCurrentProject({ status: "staffed", message: "Saved to Projects" }),
+    [saveCurrentProject],
   );
 
   const renameProject = useCallback(

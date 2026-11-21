@@ -114,9 +114,9 @@ export function Chip({ children, tone = "neutral", title }: { children: ReactNod
 }
 
 export const STATUS_META: Record<ProjectStatus, { label: string; tone: "neutral" | "good" | "warn" }> = {
-  draft: { label: "Draft", tone: "neutral" },
-  active: { label: "Draft", tone: "neutral" },
-  staffed: { label: "Confirmed", tone: "good" },
+  draft: { label: "Search", tone: "neutral" },
+  active: { label: "Search", tone: "neutral" },
+  staffed: { label: "Project", tone: "good" },
   archived: { label: "Archived", tone: "neutral" },
 };
 
