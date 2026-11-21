@@ -26,7 +26,7 @@ def build_team(scorer: Scorer, scored: list[RoleScores], per_role: int, pool: in
     if not cands:
         return {"lists": {rs.role.id: [] for rs in scored}, "proposed": {rs.role.id: [] for rs in scored}, "stats": {}}
     col = {c: j for j, c in enumerate(cands)}
-    fit = np.array([[rs.fit[c] for c in cands] for rs in scored], dtype=np.float64)  # roles x cands, -1 = ineligible
+    fit = np.array([[(rs.rank if rs.rank is not None else rs.fit)[c] for c in cands] for rs in scored], dtype=np.float64)  # roles x cands, -1 = ineligible
 
     taken: set[int] = set()
     lists: dict[str, list[int]] = {rs.role.id: [] for rs in scored}
@@ -55,7 +55,8 @@ def build_team(scorer: Scorer, scored: list[RoleScores], per_role: int, pool: in
         if rnd == 0:
             proposed = {k: list(v) for k, v in lists.items()}
     for rs in scored:
-        lists[rs.role.id].sort(key=lambda c: -rs.fit[c])
+        key = rs.rank if rs.rank is not None else rs.fit
+        lists[rs.role.id].sort(key=lambda c: -key[c])
 
     # Greedy baseline (role by role, best available first) for the same proposed slots.
     greedy_taken: set[int] = set()
@@ -69,7 +70,7 @@ def build_team(scorer: Scorer, scored: list[RoleScores], per_role: int, pool: in
             if cands[j] in greedy_taken:
                 continue
             greedy_taken.add(cands[j])
-            greedy_total += fit[r, j]
+            greedy_total += float(rs.fit[cands[j]])
             picked += 1
     opt_total = sum(float(rs.fit[c]) for rs in scored for c in proposed.get(rs.role.id, []))
     slots_total = sum(rs.role.count for rs in scored)

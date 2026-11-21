@@ -25,7 +25,10 @@ class RoleScores:
     weights: dict[str, float] = field(default_factory=dict)
     role_fit: np.ndarray | None = None
     seniority: np.ndarray | None = None
-    penalty: np.ndarray | None = None  # multiplicative factor actually applied
+    penalty: np.ndarray | None = None  # 1 where every must-have is shown, else 0
+    must_shown: np.ndarray | None = None  # must-haves shown (1) / partly shown (0.5), summed
+    n_must: int = 0
+    rank: np.ndarray | None = None  # ordering key: must-haves shown first, then fit
     scored_reqs: list[Requirement] = field(default_factory=list)
 
 
@@ -155,7 +158,8 @@ class Scorer:
         num = np.zeros(s.n, dtype=np.float32)
         den = 0.0
         rs = RoleScores(role=role, eligible=eligible, funnel=funnel, fit=num)
-        penalty = np.ones(s.n, dtype=np.float32)
+        must_shown = np.zeros(s.n, dtype=np.float32)
+        n_must = 0
         for q in role.requirements:
             w = requirement_weight(q)
             v = self.requirement_vector(q)
@@ -167,7 +171,10 @@ class Scorer:
             num += w * v
             den += w
             if q.importance == "must" and q.kind != "soft":
-                penalty *= np.where(v < vocab.PARTIAL, vocab.MISSING_MUST_PENALTY, 1.0).astype(np.float32)
+                # Non-compensatory: count must-haves shown (1) or partly shown (0.5).
+                # Ranking uses this count first, so strength elsewhere can't hide a missing must-have.
+                must_shown += np.where(v >= vocab.COVERED, 1.0, np.where(v >= vocab.PARTIAL, 0.5, 0.0)).astype(np.float32)
+                n_must += 1
         if role.target_roles:
             rw = np.zeros(len(s.cat.roles), dtype=np.float32)
             for t in role.target_roles:
@@ -182,21 +189,25 @@ class Scorer:
             rs.seniority = np.where(s.senior >= m, 1.0, np.where(s.senior == m - 1, 0.5, 0.0)).astype(np.float32)
             num += vocab.SENIORITY_WEIGHT * rs.seniority
             den += vocab.SENIORITY_WEIGHT
-        fit = (num / den) * penalty if den > 0 else np.zeros(s.n, dtype=np.float32)
-        rs.penalty = penalty
+        fit = (num / den) if den > 0 else np.zeros(s.n, dtype=np.float32)
+        rs.must_shown = must_shown
+        rs.n_must = n_must
+        rs.penalty = np.where(must_shown < n_must, 0.0, 1.0).astype(np.float32)  # 1 = every must-have shown
         rs.fit = np.where(eligible, fit, -1.0).astype(np.float32)
+        # Ranking key: must-haves shown first (steps of 0.5 outweigh any fit difference), then fit.
+        rs.rank = np.where(eligible, 2.0 * must_shown + 0.99 * fit, -1.0).astype(np.float32)
         return rs
 
     def top(self, rs: RoleScores, k: int, exclude: set[int] | None = None) -> list[int]:
-        fit = rs.fit
+        key = rs.rank if rs.rank is not None else rs.fit
         if exclude:
-            fit = fit.copy()
-            fit[list(exclude)] = -1.0
-        valid = int((fit >= 0).sum())
+            key = key.copy()
+            key[list(exclude)] = -1.0
+        valid = int((key >= 0).sum())
         if valid == 0:
             return []
         k = min(k, valid)
-        part = np.argpartition(-fit, k - 1)[:k]
-        # Stable, explainable order: fit, then more experience.
-        order = np.lexsort((-self.s.years[part], -fit[part]))
+        part = np.argpartition(-key, k - 1)[:k]
+        # Explainable order: must-haves shown, then fit, then people available now (bench) first.
+        order = np.lexsort((self.s.avail[part], -key[part]))
         return [int(i) for i in part[order]]

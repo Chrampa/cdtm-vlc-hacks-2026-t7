@@ -123,7 +123,9 @@ POSITIONS (task PLAN)
 - target_roles: up to 6 catalog roles whose people typically do this job, with fit 0-1. ALSO include adjacent roles from other departments whose people could do it (fit 0.4-0.7): finding people hidden in other teams is the goal.
 
 REQUIREMENTS (task REQUIREMENTS, for one position)
-- One requirement per distinct need of that position, at most 6. kind:
+- ONE CONCEPT PER REQUIREMENT. The skills inside one requirement must be alternatives for the SAME capability (synonyms, vendor variants, closely related tools): any one of them is enough. If the need combines different things, write separate requirements. Examples: "Kubernetes on Azure" -> "Container orchestration" {Kubernetes, AKS, EKS, GKE} AND "Azure" {Azure, AKS}; "RAG and agents" -> "RAG" AND "LLM agents"; "data pipelines on GCP" -> "Data pipelines" AND "Google Cloud".
+- MUST-HAVES are only what THIS position itself needs to do its own job (at most 4). Project context that other positions cover (e.g. the cloud platform for a project manager, mainframe skills for a cloud architect) and anything implied rather than stated is "nice" for this position.
+- At most 7 requirements per position. kind:
   "skill": technical or functional knowledge. In "skills" list 2-5 catalog skills that would evidence it, each with a match type:
      exact = the skill itself (generic supporting skills such as SQL or Python are "related" unless the requirement is about them);
      equivalent = the same concept under another name or vendor variant (e.g. AKS / EKS / GKE for Kubernetes; Google Cloud, BigQuery, Cloud Run, GKE for GCP; RGPD for GDPR);
@@ -289,6 +291,60 @@ class Interpreter:
         best = process.extractOne(name.strip().lower(), list(table.keys()), scorer=fuzz.ratio, score_cutoff=cutoff)
         return table[best[0]] if best else None
 
+    @staticmethod
+    def _strip_platform(text: str, words: list[str]) -> str:
+        out = text
+        for w in sorted(words, key=len, reverse=True):
+            out = re.sub(rf"\s*\b(?:on|en|in|with|con|de|sobre|para)?\s*{re.escape(w)}\b", " ", out, flags=re.I)
+        out = re.sub(r"\s+", " ", out).strip(" -–—,/")
+        return out[:1].upper() + out[1:] if out else ""
+
+    def _split_platforms(self, q: Requirement) -> list[Requirement]:
+        """Safety net: a checklist item that mixes a capability with a cloud platform
+        ("Azure container orchestration" = {AKS, Kubernetes, Azure, Docker}) is split into two
+        items that must BOTH be shown: the capability and the platform. Platform-specific
+        variants (AKS) count for both."""
+        if q.kind != "skill" or len(q.skills) < 2:
+            return [q]
+        names = {x.name for x in q.skills}
+        for fam in vocab.PLATFORMS.values():
+            if fam["base"] not in names:
+                continue
+            outside = [x for x in q.skills if x.name not in fam["variants"]]
+            if not outside:
+                return [q]  # the item is about the platform itself
+            words = fam["words"]
+            plat_cert = [c for c in q.certs if any(w.lower() in c.lower() for w in words + ["AZ-", "Microsoft"])] if fam["base"] == "Azure" else [c for c in q.certs if any(w.lower() in c.lower() for w in words)]
+            cap = q.model_copy(update={
+                "label": self._strip_platform(q.label, words) or q.label,
+                "keyword": self._strip_platform(q.keyword, words) or q.keyword,
+                "skills": [x for x in q.skills if x.name != fam["base"]],
+                "certs": [c for c in q.certs if c not in plat_cert],
+            })
+            platform = Requirement(
+                label=fam["label"], keyword=words[-1], kind="skill", importance=q.importance,
+                implicit=q.implicit, reason=q.reason,
+                skills=[SkillRef(name=fam["base"], match="exact")] + [SkillRef(name=x.name, match="equivalent") for x in q.skills if x.name in fam["variants"] and x.name != fam["base"]],
+                certs=plat_cert,
+            )
+            return [cap, platform]
+        return [q]
+
+    @staticmethod
+    def _dedupe(reqs: list[Requirement]) -> list[Requirement]:
+        """Drop items that check exactly the same evidence twice (keeping the stronger importance)."""
+        out: list[Requirement] = []
+        seen: dict[tuple, Requirement] = {}
+        for q in reqs:
+            key = (q.kind, frozenset(x.name for x in q.skills), frozenset(q.certs), q.sector, q.language, frozenset(q.soft))
+            if key in seen and not q.unmapped:
+                if q.importance == "must":
+                    seen[key].importance = "must"
+                continue
+            seen[key] = q
+            out.append(q)
+        return out
+
     def _add_named_skills(self, req: Requirement) -> None:
         """A requirement that literally names a catalog skill must count that skill as exact."""
         text = f" {req.label} {req.keyword} "
@@ -350,7 +406,16 @@ class Interpreter:
                 if kind in ("skill", "soft", "certification"):
                     self._add_named_skills(req)
                 req.unmapped = not (req.skills or req.certs or req.sector or req.language or req.soft)
-                reqs.append(req)
+                reqs.extend(self._split_platforms(req))
+            reqs = self._dedupe(reqs)
+            # Keep must-haves to the position's core: beyond 4, inferred must-haves become nice-to-have.
+            for q in reversed(reqs):
+                if sum(x.importance == "must" for x in reqs) <= 4:
+                    break
+                if q.importance == "must" and q.implicit:
+                    q.importance = "nice"
+            for qi, q in enumerate(reqs):
+                q.id = f"r{ri + 1}q{qi + 1}"
 
             targets: list[TargetRole] = []
             for t in r.get("target_roles") or []:

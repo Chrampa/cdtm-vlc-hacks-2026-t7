@@ -153,3 +153,44 @@ def test_interpretation_validation_and_fallback(store):
     r = fb.roles[0]
     assert r.availability == "now" and r.min_years == 3
     assert any(q.kind == "skill" and any(s.name == "SIEM" for s in q.skills) for q in r.requirements)
+
+
+def test_merged_platform_item_is_split(store):
+    """'Azure container orchestration' = {AKS, Kubernetes, Azure, Docker} must become two must-haves."""
+    it = Interpreter(store, LLMClient("http://x", None), "m")
+    raw = {"title": "t", "summary": "s", "roles": [{
+        "title": "Engineer", "count": 1, "seniority_min": None, "min_years": None, "availability": "now",
+        "countries": [], "mobility_required": False, "target_roles": [],
+        "requirements": [{"label": "Azure container orchestration", "keyword": "Azure Kubernetes", "kind": "skill",
+                          "importance": "must", "implicit": False, "reason": None,
+                          "skills": [{"name": "AKS", "match": "exact"}, {"name": "Kubernetes", "match": "equivalent"},
+                                     {"name": "Azure", "match": "exact"}, {"name": "Docker", "match": "related"}],
+                          "certs": ["Microsoft AZ-104 Azure Administrator", "Certified Kubernetes Administrator (CKA)"],
+                          "sector": None, "language": None, "min_level": None, "soft": []}],
+    }]}
+    reqs = it.normalize(raw, []).roles[0].requirements
+    assert [q.label for q in reqs] == ["Container orchestration", "Azure"]
+    assert {s.name for s in reqs[0].skills} == {"AKS", "Kubernetes", "Docker"}
+    assert {s.name for s in reqs[1].skills} == {"Azure", "AKS"}
+    assert reqs[0].certs == ["Certified Kubernetes Administrator (CKA)"]
+    assert reqs[1].certs == ["Microsoft AZ-104 Azure Administrator"]
+    assert all(q.importance == "must" for q in reqs) and reqs[0].id != reqs[1].id
+
+
+def test_missing_must_cannot_be_compensated(store, scorer):
+    """With two must-haves, everyone in the top 10 must show both; strength in one can't hide the other."""
+    role = RoleSpec(id="r1", title="x", availability="now", requirements=[
+        Requirement(id="k8s", label="Container orchestration", importance="must",
+                    skills=[SkillRef(name="Kubernetes"), SkillRef(name="AKS", match="equivalent"), SkillRef(name="EKS", match="equivalent"), SkillRef(name="GKE", match="equivalent")]),
+        Requirement(id="az", label="Azure", importance="must", skills=[SkillRef(name="Azure"), SkillRef(name="AKS", match="equivalent")]),
+    ])
+    rs = scorer.score_role(role)
+    top = scorer.top(rs, 10)
+    assert all(rs.req["k8s"][i] >= vocab.PARTIAL and rs.req["az"][i] >= vocab.PARTIAL for i in top)
+    # someone with a perfect Azure score but no containers scores far below the top
+    only_azure = np.nonzero((rs.req["az"] >= 0.99) & (rs.req["k8s"] == 0) & rs.eligible)[0]
+    assert only_azure.size and rs.rank[only_azure].max() < rs.rank[top[-1]]
+    # people showing both must-haves always outrank people showing one, whatever their fit
+    both = (rs.req["k8s"] >= vocab.COVERED) & (rs.req["az"] >= vocab.COVERED) & rs.eligible
+    one = ((rs.req["k8s"] >= vocab.COVERED) ^ (rs.req["az"] >= vocab.COVERED)) & (rs.req["k8s"] < vocab.PARTIAL) & rs.eligible
+    assert rs.rank[both].min() > rs.rank[one].max()

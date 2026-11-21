@@ -118,6 +118,31 @@ IMPORTANCE_WEIGHT = {"must": 3.0, "nice": 1.0}
 SOFT_FACTOR = 0.5  # soft skills are self-declared and weakly informative
 ROLE_FIT_WEIGHT = 1.5
 SENIORITY_WEIGHT = 1.5
-MISSING_MUST_PENALTY = 0.85  # multiplicative, per must-have with no real evidence
+# Must-haves don't compensate for each other: people are ranked by must-haves shown first, then fit.
 COVERED = 0.7
 PARTIAL = 0.3
+
+
+# Cloud platforms and the catalog skills that belong to them. Used to split checklist items that
+# mix a capability with a platform ("Kubernetes on Azure" -> "Container orchestration" + "Azure").
+PLATFORMS = {
+    "Azure": {
+        "label": "Azure",
+        "base": "Azure",
+        "variants": {"Azure", "AKS", "Azure DevOps", "Azure Data Factory", "Azure OpenAI", "Azure Synapse",
+                     "Azure Monitor", "Azure IoT Hub", "Bicep", "ARM Templates", "Entra ID"},
+        "words": ["Microsoft Azure", "Azure"],
+    },
+    "AWS": {
+        "label": "AWS",
+        "base": "AWS",
+        "variants": {"AWS", "EKS", "Lambda", "AWS Glue", "CloudFormation", "CloudWatch", "AWS IoT"},
+        "words": ["Amazon Web Services", "AWS"],
+    },
+    "Google Cloud": {
+        "label": "Google Cloud (GCP)",
+        "base": "Google Cloud",
+        "variants": {"Google Cloud", "GKE", "BigQuery", "Cloud Run"},
+        "words": ["Google Cloud Platform", "Google Cloud", "GCP"],
+    },
+}
