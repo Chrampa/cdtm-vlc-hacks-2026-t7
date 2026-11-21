@@ -162,7 +162,7 @@ export function CandidateDrawer({ c, roleTitle, exp, onClose }: {
               {c.seniority_check && (
                 <li className="flex gap-3 px-3 py-2.5">
                   <StatusIcon status={c.seniority_check.status} />
-                  <div className="text-sm"><span className="font-medium">Seniority</span> <span className="text-xs text-muted">— {c.seniority_check.actual}, asked {c.seniority_check.required} or above</span></div>
+                  <div className="text-sm"><span className="font-medium">Seniority</span> <span className="text-xs text-muted">— {c.seniority_check.actual}, asked {c.seniority_check.required}{c.seniority_check.mode === "min" ? " or above" : " (target)"}</span></div>
                 </li>
               )}
             </ul>

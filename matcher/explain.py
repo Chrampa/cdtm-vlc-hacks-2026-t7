@@ -182,9 +182,11 @@ class Explainer:
         for t in team:
             if t.get("person"):
                 names.add(t["person"]["name"])
+                tr = f" [{t['team_role']}]" if t.get("team_role") else ""
+                mn = f" Mentored by {t['mentor']}." if t.get("mentor") else ""
                 lines.append(
-                    f"- {t['role']}: {t['person']['name']} ({t['person']['role']}, {t['person']['seniority']}, {t['person']['availability']}), fit {t['person']['fit']}%. "
-                    f"Covers: {', '.join(t['person'].get('covered', [])) or 'none'}. Gaps: {', '.join(t['person'].get('gaps', [])) or 'none'}."
+                    f"- {t['role']}{tr}: {t['person']['name']} ({t['person']['role']}, {t['person']['seniority']}, {t['person']['availability']}), fit {t['person']['fit']}%. "
+                    f"Covers: {', '.join(t['person'].get('covered', [])) or 'none'}. Gaps: {', '.join(t['person'].get('gaps', [])) or 'none'}.{mn}"
                     + (f" Possible pairing: {t['complement']['name']} covers {', '.join(t['complement']['covers'])}." if t.get("complement") else "")
                 )
             else:

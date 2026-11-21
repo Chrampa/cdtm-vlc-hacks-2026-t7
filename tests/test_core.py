@@ -12,7 +12,7 @@ from matcher.evidence import EvidenceBuilder
 from matcher.explain import Explainer
 from matcher.interpret import Interpreter
 from matcher.llm import LLMClient
-from matcher.schemas import Requirement, RoleSpec, SkillRef, TargetRole
+from matcher.schemas import Requirement, RoleSpec, SkillRef, TargetRole, TeamNeed, TeamShape
 from matcher.scoring import Scorer
 from matcher.team import build_team
 
@@ -194,3 +194,149 @@ def test_missing_must_cannot_be_compensated(store, scorer):
     both = (rs.req["k8s"] >= vocab.COVERED) & (rs.req["az"] >= vocab.COVERED) & rs.eligible
     one = ((rs.req["k8s"] >= vocab.COVERED) ^ (rs.req["az"] >= vocab.COVERED)) & (rs.req["k8s"] < vocab.PARTIAL) & rs.eligible
     assert rs.rank[both].min() > rs.rank[one].max()
+
+
+def test_seniority_target_puts_requested_level_first(store, scorer):
+    """Requesting Mid (target) ranks Mids above overqualified Principals; min mode treats Senior+ equally."""
+    r_mid = RoleSpec(
+        id="r1", title="Mid Data Engineer", seniority_min="Mid", seniority_mode="target",
+        availability="soon", target_roles=[TargetRole(name="Data Engineer", fit=1.0)],
+        requirements=[
+            Requirement(id="q1", label="Python", importance="must", skills=[SkillRef(name="Python")]),
+            Requirement(id="q2", label="SQL", importance="must", skills=[SkillRef(name="SQL")]),
+        ],
+    )
+    rs_mid = scorer.score_role(r_mid)
+    top = scorer.top(rs_mid, 10)
+    assert all(vocab.SENIORITY[int(store.senior[i])] == "Mid" for i in top), "Mids come first when Mid is asked"
+    mids = (store.senior == vocab.SENIORITY.index("Mid")) & (rs_mid.must_shown == 2.0) & rs_mid.eligible
+    princs = (store.senior == vocab.SENIORITY.index("Principal")) & (rs_mid.must_shown == 2.0) & rs_mid.eligible
+    assert rs_mid.fit[mids].max() > rs_mid.fit[princs].max(), "overqualified Principals rank below Mids"
+
+    r_min = r_mid.model_copy(update={"seniority_min": "Senior", "seniority_mode": "min"})
+    rs_min = scorer.score_role(r_min)
+    assert (rs_min.seniority[store.senior >= vocab.SENIORITY.index("Senior")] == 1.0).all()
+
+
+def test_team_balanced_shape_and_mentored_junior(store, scorer):
+    """A 4-person Data & AI team balances Senior/Mid/Junior and mentors every Junior in the same area."""
+    roles = [
+        RoleSpec(id="r1", title="AI Tech Lead", count=1, seniority_min="Lead", seniority_mode="min", availability="soon",
+                 target_roles=[TargetRole(name="AI Engineer (GenAI/LLM)", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="LLMs", importance="must", skills=[SkillRef(name="LLMs")])]),
+        RoleSpec(id="r2", title="AI Engineer", count=1, availability="soon",
+                 target_roles=[TargetRole(name="AI Engineer (GenAI/LLM)", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="RAG", importance="must", skills=[SkillRef(name="RAG")])]),
+        RoleSpec(id="r3", title="Data Engineer", count=2, availability="soon",
+                 target_roles=[TargetRole(name="Data Engineer", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="Python", importance="must", skills=[SkillRef(name="Python")])]),
+    ]
+    scored = [scorer.score_role(r) for r in roles]
+    res = build_team(scorer, scored, per_role=10)
+    best = res["options"][0]
+    counts = best["shape"]["counts"]
+    assert counts["anchor"] >= 1
+    assert counts["anchor"] + counts["senior"] <= 2, "at most half Senior+"
+    assert counts["mid"] >= 1
+    assert counts["junior"] >= 1
+    learners = [m for m in best["members"] if m["team_role"] == "learner"]
+    assert learners, "Junior should be tagged learner"
+    for lr in learners:
+        assert lr["mentor"] is not None, "every Junior has a named mentor"
+        jr_area = store.area[lr["idx"]]
+        m_idx = store.idx_by_id[lr["mentor"]["employee_id"]]
+        assert store.area[m_idx] == jr_area and store.senior[m_idx] >= vocab.SENIORITY.index("Senior")
+    assert best["shared_languages"], "shared language found"
+    assert best["tz_spread_hours"] <= 4
+
+
+def test_team_whole_team_needs_and_unmet_rule_explanation(store, scorer):
+    """Whole-team needs are satisfied across the team, and impossible rules are explained plainly."""
+    roles = [
+        RoleSpec(id="r1", title="Cloud Architect", count=1, seniority_min="Senior", seniority_mode="min", availability="soon",
+                 target_roles=[TargetRole(name="Cloud Architect", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="Azure", importance="must", skills=[SkillRef(name="Azure")])]),
+        RoleSpec(id="r2", title="COBOL Developer", count=2, availability="soon",
+                 target_roles=[TargetRole(name="Mainframe Developer (COBOL)", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="COBOL", importance="must", skills=[SkillRef(name="COBOL")])]),
+        RoleSpec(id="r3", title="Data Engineer", count=1, availability="soon",
+                 target_roles=[TargetRole(name="Data Engineer", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="Python", importance="must", skills=[SkillRef(name="Python")])]),
+        RoleSpec(id="r4", title="Project Manager", count=1, seniority_min="Senior", seniority_mode="min", availability="soon",
+                 target_roles=[TargetRole(name="Project Manager", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="PM", importance="must", skills=[SkillRef(name="Gestión de proyectos")])]),
+    ]
+    needs = [
+        TeamNeed(id="tn1", label="Banking", kind="sector", sector="Banca y Finanzas", scope="at_least", min_people=2, importance="must"),
+        TeamNeed(id="tn2", label="Spanish", kind="language", language="Español", min_level="B2", scope="all", min_people=5, importance="must"),
+    ]
+    scored = [scorer.score_role(r) for r in roles]
+    res = build_team(scorer, scored, per_role=10, team_needs=needs)
+    best = res["options"][0]
+    by_need = {n["id"]: n for n in best["team_needs"]}
+    assert by_need["tn1"]["covered"] >= 2 and by_need["tn1"]["ok"]
+    assert by_need["tn2"]["covered"] == 5 and by_need["tn2"]["ok"]
+    jr_check = next(ch for ch in best["shape"]["checks"] if ch["rule"] == "junior")
+    assert not jr_check["ok"]
+    assert "COBOL" in jr_check["detail"] and "mentor" in jr_check["detail"]
+
+
+def test_team_alternatives_lock_and_swaps(store, scorer):
+    """3 alternatives returned; Ready now picks bench; locks pin a slot and swaps never duplicate."""
+    roles = [
+        RoleSpec(id="r1", title="Cloud Architect", count=1, availability="soon",
+                 target_roles=[TargetRole(name="Cloud Architect", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="Azure", importance="must", skills=[SkillRef(name="Azure")])]),
+        RoleSpec(id="r2", title="DevOps", count=2, availability="soon",
+                 target_roles=[TargetRole(name="DevOps Engineer", fit=1.0)],
+                 requirements=[Requirement(id="q1", label="Terraform", importance="must", skills=[SkillRef(name="Terraform")])]),
+    ]
+    scored = [scorer.score_role(r) for r in roles]
+    res = build_team(scorer, scored, per_role=10)
+    assert [o["id"] for o in res["options"]] == ["best_fit", "ready_now", "leanest"]
+    ready = res["options"][1]
+    assert all(store.avail[m["idx"]] == 0 for m in ready["members"]), "ready_now picks bench people"
+    best = res["options"][0]
+    team_idxs = {m["idx"] for m in best["members"]}
+    assert len(team_idxs) == 3
+    m0 = best["members"][0]
+    assert m0["swaps"], "swap alternatives computed"
+    for sw in m0["swaps"]:
+        assert sw["idx"] not in team_idxs and sw["impact"]
+
+    # Lock the first swap into slot r1#0 and re-solve
+    lock_eid = store.employee_id[m0["swaps"][0]["idx"]]
+    res2 = build_team(scorer, scored, per_role=10, locks={"r1#0": lock_eid})
+    best2 = res2["options"][0]
+    pinned = best2["members"][0]
+    assert pinned["locked"] and store.employee_id[pinned["idx"]] == lock_eid
+    assert len({m["idx"] for m in best2["members"]}) == 3
+
+
+def test_team_plan_normalizes_team_needs_and_seniority_mode(store):
+    it = Interpreter(store, LLMClient("http://x", None), "m")
+    raw = {
+        "title": "Core banking migration",
+        "summary": "s",
+        "roles": [
+            {"title": "Cloud Architect", "count": 1, "seniority_min": "Senior", "seniority_mode": "min",
+             "min_years": None, "availability": "soon", "countries": [], "mobility_required": False,
+             "target_roles": [{"name": "Cloud Architect", "fit": 1.0}],
+             "requirements": [{"label": "Banking", "keyword": "banking", "kind": "sector", "importance": "must",
+                               "implicit": True, "reason": "bank client", "skills": [], "certs": [],
+                               "sector": "Banca y Finanzas", "language": None, "min_level": None, "soft": []}]},
+            {"title": "Data Engineer", "count": 1, "seniority_min": "Mid", "seniority_mode": "target",
+             "min_years": None, "availability": "soon", "countries": [], "mobility_required": False,
+             "target_roles": [{"name": "Data Engineer", "fit": 1.0}], "requirements": []},
+        ],
+        "team_needs": [
+            {"label": "Banking domain", "kind": "sector", "scope": "at_least", "min_people": 2,
+             "importance": "must", "implicit": True, "reason": "bank", "skills": [], "certs": [],
+             "sector": "Banking & Finance", "language": None, "min_level": None},
+        ],
+    }
+    spec = it.normalize(raw, [])
+    assert spec.roles[0].seniority_mode == "min" and spec.roles[1].seniority_mode == "target"
+    assert len(spec.team_needs) == 1 and spec.team_needs[0].sector == "Banca y Finanzas"
+    # Duplicate individual sector must-have relaxed to nice since it's covered at team level
+    assert spec.roles[0].requirements[0].importance == "nice"

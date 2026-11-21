@@ -1,9 +1,8 @@
 import { Lock, RotateCcw, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { Availability, Requirement, RoleSpec } from "../types";
+import type { Availability, Requirement, RoleSpec, SeniorityMode } from "../types";
 import { cx } from "./ui";
 
-const SENIORITY = ["Junior", "Mid", "Senior", "Lead", "Principal"];
 const MATCH_LABEL: Record<string, string> = { exact: "same skill", equivalent: "same idea, other name", related: "related", transferable: "transferable" };
 
 function describe(q: Requirement): string[] {
@@ -110,13 +109,23 @@ export function Understood({ role, original, onChange, warnings }: {
         )}
         <span className="mx-1 h-4 w-px bg-line" />
         <select
-          value={role.seniority_min ?? ""}
-          onChange={(e) => update({ seniority_min: e.target.value || null })}
+          value={role.seniority_min ? `${role.seniority_min}:${role.seniority_mode ?? "target"}` : ""}
+          onChange={(e) => {
+            if (!e.target.value) return update({ seniority_min: null, seniority_mode: "target" });
+            const [lvl, mode] = e.target.value.split(":");
+            update({ seniority_min: lvl, seniority_mode: (mode as SeniorityMode) || "target" });
+          }}
           className="rounded-full border border-line bg-white px-2.5 py-1 text-sm outline-none hover:border-faint"
-          title="Preference (not a filter): people below get a lower score"
+          title="Target level ranks that exact seniority highest; 'or above' treats higher levels equally"
         >
           <option value="">Any seniority</option>
-          {SENIORITY.map((s) => <option key={s} value={s}>{s} or above</option>)}
+          <option value="Junior:target">Junior (target)</option>
+          <option value="Mid:target">Mid (target)</option>
+          <option value="Senior:target">Senior (target)</option>
+          <option value="Lead:target">Lead (target)</option>
+          <option value="Principal:target">Principal (target)</option>
+          <option value="Senior:min">Senior or above</option>
+          <option value="Lead:min">Lead or above</option>
         </select>
         {changed && (
           <button onClick={() => original && onChange(original)} className="ml-auto inline-flex items-center gap-1 text-xs text-muted hover:text-ink">

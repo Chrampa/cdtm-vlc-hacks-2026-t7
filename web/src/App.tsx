@@ -8,7 +8,7 @@ import { RoleView } from "./components/RoleView";
 import { TeamView } from "./components/TeamView";
 import { Button, cx, Spinner } from "./components/ui";
 import { Understood } from "./components/Understood";
-import type { BriefSpec, Candidate, Explanation, InterpretResponse, Meta, RoleSpec, SearchResponse, TeamReview } from "./types";
+import type { BriefSpec, Candidate, Explanation, InterpretResponse, Meta, RoleSpec, SearchResponse, TeamNeed, TeamOptionId, TeamReview, TeamShape } from "./types";
 
 type Phase = "idle" | "interpreting" | "searching" | "ready" | "error";
 
@@ -30,6 +30,9 @@ export default function App() {
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<string>("team");
+  const [teamOption, setTeamOptionState] = useState<TeamOptionId>("best_fit");
+  const [teamShape, setTeamShape] = useState<TeamShape | null>(null);
+  const [locks, setLocks] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [drawer, setDrawer] = useState<{ roleId: string; card: Candidate } | null>(null);
   const [compare, setCompare] = useState(false);
@@ -62,13 +65,25 @@ export default function App() {
     return r ? explanations[`${roleKey(r)}|${employeeId}`] : undefined;
   };
 
-  const runSearch = useCallback(async (s: BriefSpec, first: boolean) => {
+  const runSearch = useCallback(async (
+    s: BriefSpec,
+    first: boolean,
+    opts?: { shape?: TeamShape | null; locks?: Record<string, string>; option?: TeamOptionId },
+  ) => {
     searchAbort.current?.abort();
     const ctrl = new AbortController();
     searchAbort.current = ctrl;
     if (!first) setRefreshing(true);
     try {
-      const res = await api.search(s, ctrl.signal);
+      const res = await api.search(
+        s,
+        {
+          team_shape: opts?.shape !== undefined ? opts.shape : teamShape,
+          locks: opts?.locks !== undefined ? opts.locks : locks,
+          option: opts?.option ?? teamOption,
+        },
+        ctrl.signal,
+      );
       setResult(res);
       setReview(undefined);
       if (first) setTab(res.multi ? "team" : res.roles[0]?.id ?? "team");
@@ -80,7 +95,7 @@ export default function App() {
     } finally {
       if (searchAbort.current === ctrl) setRefreshing(false);
     }
-  }, []);
+  }, [teamShape, locks, teamOption]);
 
   const submit = useCallback(async () => {
     const id = ++runId.current;
@@ -92,13 +107,16 @@ export default function App() {
     setSelected({});
     setDrawer(null);
     setCompare(false);
+    setTeamShape(null);
+    setLocks({});
+    setTeamOptionState("best_fit");
     try {
       const it = await api.interpret(brief);
       if (id !== runId.current) return;
       setInterp(it);
       setSpec(it.spec);
       setPhase("searching");
-      await runSearch(it.spec, true);
+      await runSearch(it.spec, true, { shape: null, locks: {}, option: "best_fit" });
     } catch (e) {
       if (id !== runId.current) return;
       setError((e as Error).message || "Something went wrong");
@@ -106,12 +124,57 @@ export default function App() {
     }
   }, [brief, runSearch]);
 
-  // Re-rank instantly when the user edits the understood requirements.
   const editRole = (role: RoleSpec) => {
     if (!spec) return;
     const next = { ...spec, roles: spec.roles.map((r) => (r.id === role.id ? role : r)) };
     setSpec(next);
     runSearch(next, false);
+  };
+
+  const editTeamNeed = (needId: string, patch: Partial<TeamNeed> | null) => {
+    if (!spec) return;
+    const cur = spec.team_needs ?? [];
+    const nextNeeds = patch === null ? cur.filter((n) => n.id !== needId) : cur.map((n) => (n.id === needId ? { ...n, ...patch } : n));
+    const next = { ...spec, team_needs: nextNeeds };
+    setSpec(next);
+    runSearch(next, false);
+  };
+
+  const selectOption = (opt: TeamOptionId) => {
+    setTeamOptionState(opt);
+    setReview(undefined);
+  };
+
+  const changeShape = (shape: TeamShape) => {
+    setTeamShape(shape);
+    if (spec) runSearch(spec, false, { shape });
+  };
+
+  const resetShape = () => {
+    setTeamShape(null);
+    if (spec) runSearch(spec, false, { shape: null });
+  };
+
+  const toggleLock = (slotId: string, employeeId: string) => {
+    if (!spec) return;
+    const next = { ...locks };
+    if (next[slotId] === employeeId) delete next[slotId];
+    else next[slotId] = employeeId;
+    setLocks(next);
+    runSearch(spec, false, { locks: next });
+  };
+
+  const swapMember = (slotId: string, employeeId: string) => {
+    if (!spec) return;
+    const next = { ...locks, [slotId]: employeeId };
+    setLocks(next);
+    runSearch(spec, false, { locks: next });
+  };
+
+  const clearLocks = () => {
+    if (!spec || Object.keys(locks).length === 0) return;
+    setLocks({});
+    runSearch(spec, false, { locks: {} });
   };
 
   // Prefetch AI summaries for the top 3 of the visible role so the panel opens instantly.
@@ -122,25 +185,31 @@ export default function App() {
     if (r && rs) r.candidates.slice(0, 3).forEach((c) => explainFor(rs, c.employee_id));
   }, [result, tab, spec, roleById, explainFor]);
 
-  // AI team review when the team tab is shown.
+  // AI team review when the team tab is shown (matches active alternative).
   useEffect(() => {
     if (!result?.multi || tab !== "team" || review !== undefined) return;
     setReview("loading");
-    const team = result.roles.flatMap((r) => {
-      const prop = r.candidates.filter((c) => c.proposed);
-      if (!prop.length) return [{ role: r.title }];
-      return prop.map((c) => ({
-        role: r.title,
-        person: {
-          name: c.name, role: c.role, seniority: c.seniority, availability: c.availability, fit: c.fit,
-          covered: c.requirements.filter((q) => q.importance === "must" && q.status === "covered").map((q) => q.label),
-          gaps: c.requirements.filter((q) => q.importance === "must" && q.status !== "covered" && q.status !== "unknown").map((q) => q.label),
-        },
-        complement: r.complement && r.complement.for === c.employee_id ? { name: r.complement.person.name, covers: r.complement.covers } : undefined,
-      }));
-    });
+    const opt = result.team?.options?.find((o) => o.id === teamOption) ?? result.team?.options?.[0];
+    const team = opt
+      ? opt.members.map((m) =>
+          m.candidate
+            ? {
+                role: m.slot_label,
+                team_role: m.team_role,
+                mentor: m.mentor?.name,
+                person: {
+                  name: m.candidate.name, role: m.candidate.role, seniority: m.candidate.seniority,
+                  availability: m.candidate.availability, fit: m.candidate.fit,
+                  covered: m.candidate.requirements.filter((q) => q.importance === "must" && q.status === "covered").map((q) => q.label),
+                  gaps: m.candidate.requirements.filter((q) => q.importance === "must" && q.status !== "covered" && q.status !== "unknown").map((q) => q.label),
+                },
+              }
+            : { role: m.slot_label },
+        )
+      : [];
+    if (!team.length) return;
     api.teamReview(team).then(setReview).catch(() => setReview({ ok: false, error: "The AI service did not answer." }));
-  }, [result, tab, review]);
+  }, [result, tab, review, teamOption]);
 
   const openCard = (c: Candidate, roleId: string) => {
     setDrawer({ roleId, card: c });
@@ -219,7 +288,22 @@ export default function App() {
               )}
 
               {tab === "team" && result.multi && (
-                <TeamView result={result} review={review} onOpen={(c, rid) => openCard(c, rid)} onRole={setTab} />
+                <TeamView
+                  result={result}
+                  review={review}
+                  activeOption={teamOption}
+                  customShape={teamShape}
+                  locks={locks}
+                  onSelectOption={selectOption}
+                  onChangeShape={changeShape}
+                  onResetShape={resetShape}
+                  onToggleLock={toggleLock}
+                  onSwap={swapMember}
+                  onClearLocks={clearLocks}
+                  onEditTeamNeed={editTeamNeed}
+                  onOpen={(c, rid) => openCard(c, rid)}
+                  onRole={setTab}
+                />
               )}
 
               {activeRole && roleById[activeRole.id] && (

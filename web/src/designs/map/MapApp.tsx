@@ -1,9 +1,9 @@
-import { ArrowRight, Check, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Check, Lock, RotateCcw, SlidersHorizontal, Unlock, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DesignSwitch, type DesignId } from "../../core/DesignSwitch";
 import { fmt, hiddenReasons, outside, shortLine, statusWord } from "../../core/helpers";
 import type { Matcher } from "../../core/useMatcher";
-import type { Availability, Candidate, Requirement, RoleResult, RoleSpec } from "../../types";
+import type { Availability, Candidate, Requirement, RoleResult, RoleSpec, SeniorityMode, TeamOption, TeamShape } from "../../types";
 import { Detail } from "./Detail";
 
 const ink2 = { color: "var(--v-ink2)" };
@@ -238,8 +238,23 @@ function RoleMatrix({ m, role, spec, onOpen, onOpenId }: { m: Matcher; role: Rol
         </label>
         {spec.countries.map((c) => <span key={c} className="inline-flex items-center gap-1 border px-2 py-1" style={line}>{c}<button onClick={() => update({ countries: spec.countries.filter((x) => x !== c) })}><X size={12} /></button></span>)}
         <span className={label} style={ink2}>Preference</span>
-        <select value={spec.seniority_min ?? ""} onChange={(e) => update({ seniority_min: e.target.value || null })} className="border bg-white px-2 py-1 font-medium outline-none" style={line}>
-          <option value="">Any seniority</option>{["Junior", "Mid", "Senior", "Lead", "Principal"].map((s) => <option key={s} value={s}>{s}+</option>)}
+        <select
+          value={spec.seniority_min ? `${spec.seniority_min}:${spec.seniority_mode ?? "target"}` : ""}
+          onChange={(e) => {
+            if (!e.target.value) return update({ seniority_min: null, seniority_mode: "target" });
+            const [lvl, mode] = e.target.value.split(":");
+            update({ seniority_min: lvl, seniority_mode: (mode as SeniorityMode) || "target" });
+          }}
+          className="border bg-white px-2 py-1 font-medium outline-none" style={line}
+        >
+          <option value="">Any seniority</option>
+          <option value="Junior:target">Junior (target)</option>
+          <option value="Mid:target">Mid (target)</option>
+          <option value="Senior:target">Senior (target)</option>
+          <option value="Lead:target">Lead (target)</option>
+          <option value="Principal:target">Principal (target)</option>
+          <option value="Senior:min">Senior+</option>
+          <option value="Lead:min">Lead+</option>
         </select>
         <span style={ink2}>Click a requirement to change it.</span>
         {changed && <button onClick={() => m.resetRole(role.id)} className="ml-auto font-semibold underline underline-offset-4">Undo my changes</button>}
@@ -290,7 +305,7 @@ function RoleMatrix({ m, role, spec, onOpen, onOpenId }: { m: Matcher; role: Rol
             {cands.map((c, i) => <div key={c.employee_id} className="v-num border-b border-r p-4 text-[14px]" style={{ ...line, background: i === 0 ? "var(--v-surface2)" : undefined }}>{c.must_covered}/{c.must_total}</div>)}
             {spec.seniority_min && (
               <>
-                <div className="sticky left-0 z-10 border-b border-r bg-white p-4 text-[14px] font-medium" style={line}>Seniority ({spec.seniority_min}+)</div>
+                <div className="sticky left-0 z-10 border-b border-r bg-white p-4 text-[14px] font-medium" style={line}>Seniority ({spec.seniority_min}{spec.seniority_mode === "min" ? "+" : " target"})</div>
                 {cands.map((c, i) => <div key={c.employee_id} className="flex items-center gap-2 border-b border-r p-4 text-[12px]" style={{ ...line, background: i === 0 ? "var(--v-surface2)" : undefined }}><Dot s={c.seniority_check?.status ?? "covered"} />{c.seniority} · {c.years}y</div>)}
               </>
             )}
@@ -333,58 +348,276 @@ function RoleMatrix({ m, role, spec, onOpen, onOpenId }: { m: Matcher; role: Rol
 }
 
 // ------------------------------------------------------------------ team
+function MapShapeEditor({ shape, onChange, onReset, hasCustom }: { shape: TeamShape; onChange: (s: TeamShape) => void; onReset: () => void; hasCustom: boolean }) {
+  const set = (patch: Partial<TeamShape>) => onChange({ ...shape, ...patch });
+  const ctl = "border bg-white px-2 py-1 text-[13px] font-medium outline-none";
+  return (
+    <div className="mt-4 border p-4 fade-in" style={line}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className={label}>Team shape rules</div>
+        <div className="flex items-center gap-4 text-[13px]">
+          <label className="inline-flex cursor-pointer items-center gap-2 font-medium">
+            <input type="checkbox" checked={shape.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
+            Balance team
+          </label>
+          {hasCustom && (
+            <button onClick={onReset} className="inline-flex items-center gap-1 font-semibold underline underline-offset-4">
+              <RotateCcw size={12} /> Defaults
+            </button>
+          )}
+        </div>
+      </div>
+      {shape.enabled && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-[12px]">
+          <label className="flex flex-col gap-1">
+            <span className={label} style={ink2}>Anchors (Lead+)</span>
+            <select value={shape.anchors_min} onChange={(e) => set({ anchors_min: Number(e.target.value) })} className={ctl} style={line}>
+              <option value={0}>None</option><option value={1}>≥ 1</option><option value={2}>≥ 2</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={label} style={ink2}>Max Senior+</span>
+            <select value={shape.max_senior_plus_ratio} onChange={(e) => set({ max_senior_plus_ratio: Number(e.target.value) })} className={ctl} style={line}>
+              <option value={0.4}>≤ 40%</option><option value={0.5}>≤ 50%</option><option value={0.6}>≤ 60%</option><option value={0.8}>≤ 80%</option><option value={1}>No cap</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={label} style={ink2}>Mid floor</span>
+            <select value={shape.min_mid} onChange={(e) => set({ min_mid: Number(e.target.value) })} className={ctl} style={line}>
+              <option value={0}>None</option><option value={1}>≥ 1 Mid</option><option value={2}>≥ 2 Mids</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={label} style={ink2}>Junior floor</span>
+            <select value={shape.min_junior} onChange={(e) => set({ min_junior: Number(e.target.value) })} className={ctl} style={line}>
+              <option value={0}>None</option><option value={1}>≥ 1 Junior</option><option value={2}>≥ 2 Juniors</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={label} style={ink2}>Max TZ spread</span>
+            <select value={shape.max_tz_spread} onChange={(e) => set({ max_tz_spread: Number(e.target.value) })} className={ctl} style={line}>
+              <option value={2}>≤ 2h</option><option value={4}>≤ 4h</option><option value={6}>≤ 6h</option><option value={8}>≤ 8h</option><option value={24}>Any</option>
+            </select>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 pt-4 font-medium">
+            <input type="checkbox" checked={shape.mentor_juniors} onChange={(e) => set({ mentor_juniors: e.target.checked })} />
+            Mentor every Junior
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 pt-4 font-medium">
+            <input type="checkbox" checked={shape.prefer_shared_language} onChange={(e) => set({ prefer_shared_language: e.target.checked })} />
+            Shared language (B2+)
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 pt-4 font-medium">
+            <input type="checkbox" checked={shape.avoid_duplicates} onChange={(e) => set({ avoid_duplicates: e.target.checked })} />
+            Avoid duplicates
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Team({ m, onOpen }: { m: Matcher; onOpen: (roleId: string, c: Candidate) => void }) {
-  const r = m.result!;
-  const t = r.team!;
+  const [editShape, setEditShape] = useState(false);
+  const [showAllChecks, setShowAllChecks] = useState(false);
+  const [swapSlot, setSwapSlot] = useState<string | null>(null);
+  const t = m.result!.team!;
+  const opt: TeamOption | null = m.activeTeamOption;
   const review = m.review;
-  const rows = r.roles.flatMap((role) => {
-    const prop = role.candidates.filter((c) => c.proposed);
-    return Array.from({ length: role.count }, (_, k) => ({ role, c: prop[k] as Candidate | undefined, k }));
-  });
+  const lockCount = Object.keys(m.locks).length;
+
+  if (!opt) {
+    return <div className="px-8 pt-7 text-[14px]" style={ink2}>No team options available.</div>;
+  }
+
+  const failedChecks = opt.shape.checks.filter((ch) => !ch.ok);
+  const visibleChecks = showAllChecks ? opt.shape.checks : failedChecks;
+
   return (
     <div className="grid gap-10 px-8 pt-7 xl:grid-cols-[1fr_340px] fade-in">
       <div>
-        <h1 className="v-display text-[30px] font-semibold leading-9 tracking-tight">The team</h1>
-        <p className="mt-1 text-[14px]" style={ink2}>Optimised as a whole: each person appears in one role only, and only people free in time are used.</p>
-        <dl className="mt-6 grid grid-cols-3 border-l border-t" style={line}>
-          {[["Places filled", `${t.filled}/${t.slots}`], ["Average fit", `${t.avg_fit}`], ["People in two roles", "0"]].map(([k, v]) => (
-            <div key={k} className="border-b border-r p-4" style={line}><dt className={label} style={ink2}>{k}</dt><dd className="v-num mt-1 text-[28px] font-medium">{v}</dd></div>
-          ))}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="v-display text-[30px] font-semibold leading-9 tracking-tight">The team</h1>
+            <p className="mt-1 text-[14px]" style={ink2}>Optimised jointly for role fit, balanced seniority, whole-team needs, shared language, and time zones.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {lockCount > 0 && (
+              <button onClick={m.clearLocks} className="inline-flex items-center gap-1 border px-3 py-1.5 text-[12px] font-semibold" style={line}>
+                <Unlock size={12} /> Clear {lockCount} lock{lockCount > 1 ? "s" : ""}
+              </button>
+            )}
+            <button onClick={() => setEditShape((v) => !v)} className="inline-flex items-center gap-1.5 border px-3 py-1.5 text-[12px] font-semibold" style={editShape ? { borderColor: "var(--v-ink)", background: "var(--v-ink)", color: "#fff" } : line}>
+              <SlidersHorizontal size={12} /> Edit shape
+            </button>
+          </div>
+        </div>
+
+        {/* 3 Alternative tabs */}
+        <div className="mt-5 grid grid-cols-3 border-l border-t" style={line}>
+          {t.options.map((o, idx) => {
+            const active = o.id === opt.id;
+            return (
+              <button
+                key={o.id}
+                onClick={() => { m.setTeamOption(o.id); setSwapSlot(null); }}
+                className="border-b border-r p-4 text-left transition-colors"
+                style={{ ...line, background: active ? "var(--v-surface2)" : "#fff", boxShadow: active ? "inset 0 -2px 0 var(--v-ink)" : undefined }}
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className={label} style={{ color: active ? "var(--v-ink)" : "var(--v-ink2)" }}>{String(idx + 1).padStart(2, "0")} {o.label}</span>
+                  <span className="v-num text-[22px] font-medium">{o.avg_fit}</span>
+                </div>
+                <div className="mt-1 text-[12px]" style={ink2}>{o.shape.summary}</div>
+                <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[.06em]" style={{ color: o.ready_now_count === o.slots_filled ? "var(--v-good)" : "var(--v-ink2)" }}>{o.ready_by}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Scorecard */}
+        <dl className="mt-4 grid grid-cols-2 border-l border-t sm:grid-cols-4" style={line}>
+          <div className="border-b border-r p-3.5" style={line}>
+            <dt className={label} style={ink2}>Places</dt>
+            <dd className="v-num mt-1 text-[22px] font-medium">{opt.slots_filled}/{opt.slots_total}</dd>
+          </div>
+          <div className="border-b border-r p-3.5" style={line}>
+            <dt className={label} style={ink2}>Shape</dt>
+            <dd className="mt-1 text-[13px] font-semibold leading-5">{opt.shape.summary}</dd>
+          </div>
+          <div className="border-b border-r p-3.5" style={line}>
+            <dt className={label} style={ink2}>Shared language</dt>
+            <dd className="mt-1 text-[13px] font-semibold leading-5">{opt.shared_languages.length ? opt.shared_languages.slice(0, 2).join(", ") : "None at B2+"}</dd>
+          </div>
+          <div className="border-b border-r p-3.5" style={line}>
+            <dt className={label} style={ink2}>Time zones</dt>
+            <dd className="mt-1 text-[13px] font-semibold leading-5">{opt.tz_summary}</dd>
+          </div>
         </dl>
-        <div className="mt-6 overflow-x-auto border-l border-t" style={line}>
-          <table className="w-full min-w-[760px] text-left text-[13px]">
+
+        {/* Whole-team needs */}
+        {opt.team_needs.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px]">
+            <span className={label} style={ink2}>Whole-team needs</span>
+            {opt.team_needs.map((tn) => (
+              <span key={tn.id} title={tn.members.join(", ")} className="inline-flex items-center gap-1.5 border px-2.5 py-1 font-semibold" style={{ borderColor: tn.ok ? "var(--v-ink)" : "var(--v-warn)", color: tn.ok ? "var(--v-ink)" : "var(--v-warn)" }}>
+                <span>{tn.ok ? "✓" : "!"} {tn.label}</span>
+                <span className="v-num" style={ink2}>{tn.covered}/{tn.target}</span>
+                <button onClick={() => m.editTeamNeed(tn.id, null)} title="Remove" style={ink2}><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Shape rule notes */}
+        {opt.shape.checks.length > 0 && (
+          <div className="mt-3 space-y-1 text-[12px]">
+            {visibleChecks.map((ch) => (
+              <div key={ch.rule} style={{ color: ch.ok ? "var(--v-ink2)" : "var(--v-warn)" }}>
+                <span className="font-semibold">{ch.ok ? "✓" : "!"} {ch.label}:</span> {ch.detail}
+              </div>
+            ))}
+            <button onClick={() => setShowAllChecks((v) => !v)} className="font-semibold underline underline-offset-4" style={ink2}>
+              {showAllChecks ? "Hide passing rules" : failedChecks.length ? `Inspect all ${opt.shape.checks.length} rules` : `All ${opt.shape.checks.length} shape rules met — inspect`}
+            </button>
+          </div>
+        )}
+
+        {editShape && (
+          <MapShapeEditor shape={m.teamShape ?? t.shape} onChange={m.updateTeamShape} onReset={m.resetTeamShape} hasCustom={m.teamShape !== null} />
+        )}
+
+        {/* Slots table */}
+        <div className="mt-5 overflow-x-auto border-l border-t" style={line}>
+          <table className="w-full min-w-[780px] text-left text-[13px]">
             <thead>
               <tr className="text-[11px] font-semibold uppercase tracking-[.12em]" style={ink2}>
-                {["Role", "Person", "Fit", "Must-haves", "Availability", ""].map((h) => <th key={h} className="border-b border-r px-4 py-3 font-semibold" style={line}>{h}</th>)}
+                {["Slot", "Person", "Fit", "Must-haves", "Availability", "Actions"].map((h) => (
+                  <th key={h} className="border-b border-r px-4 py-3 font-semibold" style={line}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ role, c, k }) => (
-                <tr key={`${role.id}-${k}`}>
-                  <td className="border-b border-r px-4 py-3 align-top font-semibold" style={line}>{role.title}{role.count > 1 && <span className="v-num font-normal" style={ink2}> {k + 1}/{role.count}</span>}</td>
-                  {c ? (
-                    <>
-                      <td className="border-b border-r px-4 py-3 align-top" style={line}>
-                        <button onClick={() => onOpen(role.id, c)} className="text-left font-semibold hover:underline">{c.name}</button>
-                        <div style={ink2}>{c.position}</div>
-                        {role.complement && role.complement.for === c.employee_id && <div className="mt-1 text-[12px]" style={{ color: "var(--v-accent-ink)" }}>Pair with {role.complement.person.name} for {role.complement.covers.join(", ")}</div>}
-                      </td>
-                      <td className="v-num border-b border-r px-4 py-3 align-top text-[18px]" style={line}>{c.fit}</td>
-                      <td className="border-b border-r px-4 py-3 align-top" style={line}>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1">{c.requirements.filter((q) => q.importance === "must" && q.status !== "unknown").map((q) => <span key={q.id} className="inline-flex items-center gap-1.5" title={statusWord(q.status)}><Dot s={q.status} size={11} />{q.label}</span>)}</div>
-                      </td>
-                      <td className="border-b border-r px-4 py-3 align-top text-[12px] font-semibold uppercase tracking-[.06em]" style={{ ...line, color: availColor(c.availability_code) }}>{c.availability}</td>
-                      <td className="border-b border-r px-4 py-3 align-top" style={line}><button onClick={() => m.setTab(role.id)} className="whitespace-nowrap text-[12px] font-semibold underline underline-offset-4">Alternatives</button></td>
-                    </>
-                  ) : (
-                    <td colSpan={5} className="border-b border-r px-4 py-3" style={{ ...line, color: "var(--v-bad)" }}>Nobody eligible for this place — loosen the rules in the role tab.</td>
-                  )}
-                </tr>
-              ))}
+              {opt.members.map((member) => {
+                const c = member.candidate;
+                const openSwap = swapSlot === member.slot_id;
+                return (
+                  <tr key={member.slot_id} style={{ background: member.locked ? "var(--v-surface2)" : undefined }}>
+                    <td className="border-b border-r px-4 py-3 align-top" style={line}>
+                      <div className="font-semibold">{member.slot_label}</div>
+                      <div className="mt-1 inline-block border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[.1em]" style={{ ...line, color: member.team_role === "anchor" ? "var(--v-accent-ink)" : member.team_role === "learner" ? "var(--v-good)" : "var(--v-ink2)" }}>
+                        {member.team_role}
+                      </div>
+                    </td>
+                    {c ? (
+                      <>
+                        <td className="border-b border-r px-4 py-3 align-top" style={line}>
+                          <button onClick={() => onOpen(member.role_id, c)} className="text-left font-semibold hover:underline">{c.name}</button>
+                          <div style={ink2}>{c.seniority} · {c.position} · {c.location}</div>
+                          {member.mentor && (
+                            <div className="mt-1 text-[12px]" style={{ color: "var(--v-accent-ink)" }}>
+                              {member.team_role === "learner" ? "Mentored by" : "Paired with"} {member.mentor.name} ({member.mentor.seniority})
+                            </div>
+                          )}
+                          {openSwap && member.swaps.length > 0 && (
+                            <div className="mt-3 border-t pt-2.5 space-y-2" style={line}>
+                              <div className={label} style={ink2}>Swap alternatives</div>
+                              {member.swaps.map((sw) => (
+                                <div key={sw.candidate.employee_id} className="flex items-center justify-between gap-2 border p-2 text-[12px] bg-white" style={line}>
+                                  <div className="min-w-0">
+                                    <div className="font-semibold">{sw.candidate.name} <span className="font-normal" style={ink2}>· {sw.candidate.seniority} · {sw.candidate.fit}%</span></div>
+                                    <div style={ink2}>{sw.impact.join(" · ")}</div>
+                                  </div>
+                                  <button
+                                    onClick={() => { m.swapMember(member.slot_id, sw.candidate.employee_id); setSwapSlot(null); }}
+                                    className="shrink-0 px-2.5 py-1 text-[11px] font-semibold text-white"
+                                    style={{ background: "var(--v-ink)" }}
+                                  >
+                                    Swap
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="v-num border-b border-r px-4 py-3 align-top text-[18px]" style={line}>{c.fit}</td>
+                        <td className="border-b border-r px-4 py-3 align-top" style={line}>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1">
+                            {c.requirements.filter((q) => q.importance === "must" && q.status !== "unknown").map((q) => (
+                              <span key={q.id} className="inline-flex items-center gap-1.5" title={statusWord(q.status)}><Dot s={q.status} size={11} />{q.label}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="border-b border-r px-4 py-3 align-top text-[12px] font-semibold uppercase tracking-[.06em]" style={{ ...line, color: availColor(c.availability_code) }}>{c.availability}</td>
+                        <td className="border-b border-r px-4 py-3 align-top" style={line}>
+                          <div className="flex flex-col items-start gap-1.5">
+                            <button
+                              onClick={() => m.toggleLock(member.slot_id, c.employee_id)}
+                              className="inline-flex items-center gap-1 text-[12px] font-semibold underline underline-offset-4"
+                              style={{ color: member.locked ? "var(--v-accent-ink)" : "var(--v-ink)" }}
+                            >
+                              {member.locked ? <Lock size={12} /> : <Unlock size={12} />} {member.locked ? "Locked" : "Lock"}
+                            </button>
+                            {member.swaps.length > 0 && (
+                              <button onClick={() => setSwapSlot(openSwap ? null : member.slot_id)} className="inline-flex items-center gap-1 text-[12px] font-semibold underline underline-offset-4">
+                                <ArrowLeftRight size={12} /> {openSwap ? "Close" : "Swap"}
+                              </button>
+                            )}
+                            <button onClick={() => m.setTab(member.role_id)} className="text-[12px] underline underline-offset-4" style={ink2}>Role tab</button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <td colSpan={5} className="border-b border-r px-4 py-3" style={{ ...line, color: "var(--v-bad)" }}>Nobody eligible for this place — loosen the rules in the role tab.</td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
       <aside className="border-t pt-5 xl:border-l xl:border-t-0 xl:pl-8 xl:pt-0" style={line}>
         <div className={label} style={ink2}>Team review · AI</div>
         {review === "loading" && <p className="mt-3 text-[14px]" style={ink2}>Reviewing the team…</p>}
@@ -400,7 +633,6 @@ function Team({ m, onOpen }: { m: Matcher; onOpen: (roleId: string, c: Candidate
     </div>
   );
 }
-
 function Loading({ m }: { m: Matcher }) {
   const steps = [["interpreting", "Reading the brief"], ["searching", `Scoring ${m.meta ? fmt.format(m.meta.profiles) : "all"} people`]];
   const idx = steps.findIndex(([k]) => k === m.phase);

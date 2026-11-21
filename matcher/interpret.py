@@ -20,7 +20,7 @@ from rapidfuzz import fuzz, process
 from . import vocab
 from .data import Store
 from .llm import LLMClient, LLMError
-from .schemas import BriefSpec, InterpretResponse, Requirement, RoleSpec, SkillRef, TargetRole
+from .schemas import BriefSpec, InterpretResponse, Requirement, RoleSpec, SkillRef, TargetRole, TeamNeed
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +71,7 @@ PLAN_ROLE_SCHEMA = {
             "type": ["string", "null"],
             "enum": ["Trainee", "Junior", "Mid", "Senior", "Lead", "Principal", None],
         },
+        "seniority_mode": {"type": "string", "enum": ["target", "min"]},
         "min_years": {"type": ["integer", "null"]},
         "availability": {"type": "string", "enum": ["now", "soon", "any"]},
         "countries": _STR_LIST,
@@ -86,8 +87,42 @@ PLAN_ROLE_SCHEMA = {
         },
     },
     "required": [
-        "title", "count", "scope", "seniority_min", "min_years", "availability", "countries",
+        "title", "count", "scope", "seniority_min", "seniority_mode", "min_years", "availability", "countries",
         "mobility_required", "target_roles",
+    ],
+    "additionalProperties": False,
+}
+
+TEAM_NEED_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string"},
+        "kind": {"type": "string", "enum": ["skill", "sector", "language", "certification"]},
+        "scope": {"type": "string", "enum": ["all", "at_least"]},
+        "min_people": {"type": "integer"},
+        "importance": {"type": "string", "enum": ["must", "nice"]},
+        "implicit": {"type": "boolean"},
+        "reason": _NULLABLE_STR,
+        "skills": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "match": {"type": "string", "enum": ["exact", "equivalent", "related", "transferable"]},
+                },
+                "required": ["name", "match"],
+                "additionalProperties": False,
+            },
+        },
+        "certs": _STR_LIST,
+        "sector": _NULLABLE_STR,
+        "language": _NULLABLE_STR,
+        "min_level": {"type": ["string", "null"], "enum": ["A2", "B1", "B2", "C1", "C2", "Nativo", None]},
+    },
+    "required": [
+        "label", "kind", "scope", "min_people", "importance", "implicit", "reason",
+        "skills", "certs", "sector", "language", "min_level",
     ],
     "additionalProperties": False,
 }
@@ -98,8 +133,9 @@ PLAN_SCHEMA = {
         "title": {"type": "string"},
         "summary": {"type": "string"},
         "roles": {"type": "array", "items": PLAN_ROLE_SCHEMA},
+        "team_needs": {"type": "array", "items": TEAM_NEED_SCHEMA},
     },
-    "required": ["title", "summary", "roles"],
+    "required": ["title", "summary", "roles", "team_needs"],
     "additionalProperties": False,
 }
 
@@ -119,7 +155,14 @@ POSITIONS (task PLAN)
   min_years: only when a minimum number of years of total experience is explicitly stated ("at least 3 years", "+5 years"); otherwise null. Brief-wide constraints apply to every position.
   countries: catalog countries only if the brief explicitly says the person must be located/based there; otherwise []. The client's nationality is NOT a location requirement.
   mobility_required: true only if travelling or relocating abroad is required.
-- seniority_min: the lowest seniority asked for (Junior, Mid, Senior, Lead, Principal) or null. "Senior" -> Senior; "Lead"/"Head of" -> Lead; an Architect position usually implies Senior.
+- seniority_min & seniority_mode:
+  seniority_min is Junior, Mid, Senior, Lead, Principal, or null.
+  seniority_mode is "target" when a specific level is asked for ("Mid Data Engineer", "Junior analyst", "Senior AI Engineer") so that exact level ranks highest; use "min" when the brief asks for "Senior+", "at least Senior", "or above", or for an Architect / Lead / Programme Manager anchor slot in a multi-person team.
+  In a multi-person team, leave seniority_min=null on builder/developer slots where no seniority was stated so the team optimiser can balance Senior, Mid and Junior levels.
+- team_needs (ONLY for multi-person teams with 2+ total seats; ALWAYS [] for a single-person brief):
+  Shared needs satisfied at the WHOLE-TEAM level rather than demanded from every individual.
+  Examples: a core-banking migration -> sector "Banca y Finanzas" with scope="at_least", min_people=2, importance="must", implicit=true; a Spanish public-sector brief -> language "Español" (B2) with scope="all", min_people=1, importance="must", implicit=true, and sector "Sector Público" with scope="at_least", min_people=1, importance="nice".
+  Keep to at most 4 team_needs.
 - target_roles: up to 6 catalog roles whose people typically do this job, with fit 0-1. ALSO include adjacent roles from other departments whose people could do it (fit 0.4-0.7): finding people hidden in other teams is the goal.
 
 REQUIREMENTS (task REQUIREMENTS, for one position)
@@ -243,8 +286,12 @@ class Interpreter:
         lang = "English" if _looks_english(brief) else "Spanish"
         lang_note = f"Write every human-readable text field in {lang}."
 
-        def req_task(title: str, scope: str, others: list[str]) -> str:
-            pos = f'the position "{title}" (scope: {scope}). Positions in this brief: {", ".join(others)}. Only include needs of this position.' if title else "the single position described in the brief."
+        def req_task(title: str, scope: str, others: list[str], team_labels: list[str] | None = None) -> str:
+            if title:
+                tn = f' Already handled at whole-team level (do NOT repeat as must-haves for every slot): {", ".join(team_labels)}.' if team_labels else ""
+                pos = f'the position "{title}" (scope: {scope}). Positions in this brief: {", ".join(others)}.{tn} Only include needs of this position.'
+            else:
+                pos = "the single position described in the brief."
             return f"BRIEF:\n{brief}\n\nTASK REQUIREMENTS: write the requirements for {pos} {lang_note}"
 
         async def reqs(task: str) -> list[dict]:
@@ -266,7 +313,8 @@ class Interpreter:
             else:
                 speculative.cancel()
                 titles = [r.get("title", "") for r in roles]
-                results = await asyncio.gather(*(reqs(req_task(r.get("title", ""), r.get("scope", ""), titles)) for r in roles))
+                tn_labels = [t.get("label", "") for t in (plan.get("team_needs") or []) if t.get("label")]
+                results = await asyncio.gather(*(reqs(req_task(r.get("title", ""), r.get("scope", ""), titles, tn_labels)) for r in roles))
                 for role, rq in zip(roles, results):
                     role["requirements"] = rq
         finally:
@@ -428,6 +476,7 @@ class Interpreter:
                     targets.append(TargetRole(name=name, fit=min(1.0, max(0.0, fit))))
             countries = [c for c in (self._canon("country", x, cutoff=85) for x in r.get("countries") or []) if c]
             seniority = r.get("seniority_min") if r.get("seniority_min") in vocab.SENIORITY else None
+            seniority_mode = "min" if r.get("seniority_mode") == "min" else "target"
             min_years = r.get("min_years")
             if not isinstance(min_years, int) or min_years <= 0:
                 min_years = None
@@ -438,6 +487,7 @@ class Interpreter:
                     title=(r.get("title") or f"Role {ri + 1}").strip()[:80],
                     count=min(count, 10),
                     seniority_min=seniority,
+                    seniority_mode=seniority_mode,
                     min_years=min(min_years, 45) if min_years else None,
                     availability=r.get("availability") if r.get("availability") in vocab.AVAILABILITY_FILTER else "soon",
                     countries=countries,
@@ -448,12 +498,122 @@ class Interpreter:
             )
         if not roles:
             raise ValueError("The model returned no roles")
+
+        total_slots = sum(r.count for r in roles)
+        team_needs: list[TeamNeed] = []
+        if total_slots >= 2:
+            seen_tn: set[tuple] = set()
+            for ti, tn in enumerate((raw.get("team_needs") or [])[:6]):
+                kind = tn.get("kind") if tn.get("kind") in ("skill", "sector", "language", "certification", "soft") else "sector"
+                skills: list[SkillRef] = []
+                seen_sk: set[str] = set()
+                for sk in tn.get("skills") or []:
+                    name = self._canon("skill", (sk or {}).get("name"))
+                    if name and name not in seen_sk:
+                        seen_sk.add(name)
+                        match = sk.get("match") if sk.get("match") in vocab.MATCH_WEIGHT else "related"
+                        skills.append(SkillRef(name=name, match=match))
+                certs = list(dict.fromkeys(c for c in (self._canon("cert", x) for x in tn.get("certs") or []) if c))
+                sector = self._canon("sector", tn.get("sector"), cutoff=80)
+                language = self._canon("lang", tn.get("language"), cutoff=80)
+                min_level = tn.get("min_level") if tn.get("min_level") in vocab.LANG_LEVEL_RANK else None
+                if kind == "language" and language and not min_level:
+                    min_level = "B2"
+                if kind == "sector" and not sector:
+                    continue
+                if kind == "language" and not language:
+                    continue
+                if kind == "skill" and not skills and not certs:
+                    continue
+                if kind == "certification" and not certs:
+                    continue
+                scope = "all" if tn.get("scope") == "all" else "at_least"
+                mp = tn.get("min_people")
+                min_people = total_slots if scope == "all" else max(1, min(total_slots, int(mp) if isinstance(mp, int) and mp > 0 else min(2, total_slots)))
+                key = (kind, sector, language, tuple(sorted(x.name for x in skills)), tuple(sorted(certs)))
+                if key in seen_tn:
+                    continue
+                seen_tn.add(key)
+                team_needs.append(
+                    TeamNeed(
+                        id=f"tn{len(team_needs) + 1}",
+                        label=(tn.get("label") or (vocab.SECTOR_EN.get(sector, sector) if sector else vocab.LANGUAGE_EN.get(language, language) if language else "Team need")).strip()[:60],
+                        kind=kind,
+                        scope=scope,
+                        min_people=min_people,
+                        importance="nice" if tn.get("importance") == "nice" else "must",
+                        implicit=bool(tn.get("implicit")),
+                        reason=(tn.get("reason") or None) if tn.get("implicit") else None,
+                        skills=skills,
+                        certs=certs,
+                        sector=sector if kind == "sector" else None,
+                        language=language if kind == "language" else None,
+                        min_level=min_level if kind == "language" else None,
+                        unmapped=False,
+                    )
+                )
+            # Safety net: if a shared sector or language was repeated across multiple roles instead of team_needs,
+            # lift it to team_needs and relax individual must-haves so the optimiser balances it across the team.
+            if not team_needs and len(roles) >= 2:
+                sec_counts: dict[str, list[tuple[RoleSpec, Requirement]]] = {}
+                lang_counts: dict[str, list[tuple[RoleSpec, Requirement]]] = {}
+                for role in roles:
+                    for q in role.requirements:
+                        if q.kind == "sector" and q.sector:
+                            sec_counts.setdefault(q.sector, []).append((role, q))
+                        elif q.kind == "language" and q.language:
+                            lang_counts.setdefault(q.language, []).append((role, q))
+                for sec, hits in sec_counts.items():
+                    if len(hits) >= 2:
+                        imp = "must" if any(q.importance == "must" for _, q in hits) else "nice"
+                        team_needs.append(
+                            TeamNeed(
+                                id=f"tn{len(team_needs) + 1}",
+                                label=f"{vocab.SECTOR_EN.get(sec, sec)} experience",
+                                kind="sector",
+                                scope="at_least",
+                                min_people=min(2, total_slots),
+                                importance=imp,
+                                implicit=all(q.implicit for _, q in hits),
+                                reason=next((q.reason for _, q in hits if q.reason), None),
+                                sector=sec,
+                            )
+                        )
+                        for _, q in hits:
+                            if q.importance == "must":
+                                q.importance = "nice"
+                for lng, hits in lang_counts.items():
+                    if len(hits) >= 2:
+                        lvl = max((q.min_level or "B2" for _, q in hits), key=lambda x: vocab.LANG_LEVEL_RANK.get(x, 4))
+                        team_needs.append(
+                            TeamNeed(
+                                id=f"tn{len(team_needs) + 1}",
+                                label=f"{vocab.LANGUAGE_EN.get(lng, lng)} ({lvl}+)",
+                                kind="language",
+                                scope="all",
+                                min_people=total_slots,
+                                importance="must" if any(q.importance == "must" for _, q in hits) else "nice",
+                                implicit=all(q.implicit for _, q in hits),
+                                reason=next((q.reason for _, q in hits if q.reason), None),
+                                language=lng,
+                                min_level=lvl,
+                            )
+                        )
+            # Also if a sector/language is ALREADY in team_needs, downgrade duplicate individual must-haves to nice.
+            tn_sectors = {tn.sector for tn in team_needs if tn.kind == "sector" and tn.sector and tn.scope == "at_least"}
+            if tn_sectors:
+                for role in roles:
+                    for q in role.requirements:
+                        if q.kind == "sector" and q.sector in tn_sectors and q.importance == "must":
+                            q.importance = "nice"
+
         if dropped:
             log.info("Dropped non-catalog skills: %s", sorted(dropped))
         return BriefSpec(
             title=(raw.get("title") or "Staffing brief").strip()[:80],
             summary=(raw.get("summary") or "").strip()[:300],
             roles=roles,
+            team_needs=team_needs,
         )
 
     # -------------------------------------------------------------- fallback
@@ -488,6 +648,7 @@ class Interpreter:
         m = re.search(r"(\d{1,2})\s*\+?\s*(?:years|year|yrs|años|anos)", text)
         min_years = int(m.group(1)) if m else None
         seniority = next((s for s in reversed(vocab.SENIORITY) if re.search(rf"\b{s.lower()}\b", text)), None)
+        seniority_mode = "min" if (seniority and re.search(rf"{seniority.lower()}\s*\+|at least\s+{seniority.lower()}|{seniority.lower()}\s+or\s+above|{seniority.lower()}\s+o\s+superior", text)) else "target"
 
         def is_nice(term: str) -> bool:
             for sent in re.split(r"[.;\n]", text):
@@ -527,6 +688,6 @@ class Interpreter:
         return BriefSpec(
             title="Staffing brief",
             summary=brief.strip()[:200],
-            roles=[RoleSpec(id="r1", title=targets[0].name if targets else "Requested profile", seniority_min=seniority,
+            roles=[RoleSpec(id="r1", title=targets[0].name if targets else "Requested profile", seniority_min=seniority, seniority_mode=seniority_mode,
                             min_years=min_years, availability=availability, target_roles=targets, requirements=reqs[:12])],
         )

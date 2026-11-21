@@ -1,50 +1,34 @@
-# Open Data Analysis — Hub Plan
+# Insider · AI Talent Matcher — Hackathon Plan & Current State
 
-Roles: the Hub coordinator (Claude) coordinates the 5 sibling sub-projects (`opendata`,
-`audiences`, `campaigns-discovery`, `ai-catalogs`, `vistomi`), maintains `docs/CONTRACTS.md`,
-and delegates both cross-project analytical code (in this hub repo) and member changes (in sibling
-repos) using hybrid delegation (direct workers for scoped tasks; member coordinators for large
-autonomous phases). Each task ends with a report in `docs/reports/`.
+**Event:** CDTM × UPV-UV Hackathon (VLC Hacks 2026 · 2026-11-21) · Team T7 · **NTT DATA "AI Talent Matcher"** case.  
+**Pitch:** 3 minutes. **Rubric:** Tech 30% · Solving + Innovation 25% · Business 25% · Pitch 20%.  
+**Case PDFs:** `docs/case/NTT DATA- Case for students.pdf`, `docs/case/NTT DATA- Case Data and Resources.pdf`.  
+**Dataset notes:** `docs/DATASET.md`.
 
-## Goal
+## Current state (verified 2026-11-21)
 
-Run the **Open Data Analysis** group as one coherent intelligence and analytical system around a
-single entry point:
-1. Coordinate roadmap, data quality, and schema contracts across `opendata`, `audiences`,
-   `campaigns discovery`, `ai-catalogs`, and `vistomi`.
-2. Build unified cross-project views, joins, and reports inside this hub (reading member outputs
-   read-only) to connect:
-   - paying audiences & US trademark activity (`audiences`),
-   - live EU/global market & app/domain signals (`opendata`),
-   - EU Meta ad spend & affiliate demand (`campaigns discovery`),
-   - AI catalog/directory citation sources (`ai-catalogs`),
-   - AI recommendation visibility & product positioning (`vistomi`).
+Everything below is built, tested (**16/16 pytest passing**, Vite production build passing), and running live.
 
-## Facts (verified 2026-11-19)
+### Runtime & deployment
+- **Repo:** `/home/user/orca/projects/cdtm-vlc-hacks-2026-t7` (remote `github.com:Chrampa/cdtm-vlc-hacks-2026-t7`, branch `open-data-hub`).
+- **Live service:** transient systemd user unit `insider-talent-matcher` on `http://127.0.0.1:8765` (`systemctl --user restart insider-talent-matcher`).
+- **Tailnet URL:** `https://pc.tailf0e19d.ts.net:8447` (undo with `tailscale serve --https=8447 off`).
+- **AI endpoint:** Ironlane OpenAI-compatible API (key file `~/.pi/agent/ironlane.key`), default model `deepseek/deepseek-v4.1-flash` (`Mimo v2.6 Flash` was tested and is 4–5× slower).
+- **UI:** People UI (`web/src/designs/people/PeopleApp.tsx`, `Profile.tsx`, `Compare.tsx`, backed by `web/src/core/useMatcher.ts`) served directly at `/` via `web/src/Root.tsx` (user chose People as the single UI; switcher removed). `/design` remains available for reference.
 
-- Orca project group: **Open Data Analysis** (`id=2fd93fa6-c85e-49d7-9c2e-d0860f7df332`), 5 member repos registered in `hub.toml` / `docs/PROJECTS.md`.
-- `opendata`: Python (`uv`), scheduled collectors (`openrouter`, `appstore`, `trustmrr`, `gtrends`, `ct`), DuckDB SQL interface (`uv run opendata sql`).
-- `audiences`: Python (`uv`), protocol-hashed (`protocol.md` / `protocol.sha256`), interim parquets (`data/interim/*.parquet`, incl. 239M `tm_software.parquet`) and v3 rankings (`out/v3_ranking.csv`, `out/spain_overlay.csv`, `out/report_v3.md`).
-- `campaigns discovery`: Python + Docker Compose PostgreSQL (`localhost:55432`, `data/postgres`), Meta Ad Library + affiliate network exports (`exports/*.csv`, `exports/*.md`). Path contains a space.
-- `ai-catalogs`: already configured with `coordinator@1.2.0` (`docs/PLAN.md`, `docs/reports/`).
-- `vistomi`: AI visibility/recommendation product repo (`docs/`, `design/`, `landing/`, GitHub `Kkordik/vistomi`).
+### Implemented architecture & guarantees
 
-## Cross-project roadmap
+| Layer | File(s) | What it does |
+|---|---|---|
+| Data store | `matcher/data.py` | Loads 190k profiles into flat numpy arrays + DuckDB cursor for raw profile hydration & literal keyword baseline |
+| Brief interpreter | `matcher/interpret.py` | Parallel LLM calls (`PLAN` + per-role `REQUIREMENTS`) against closed catalog, strict validation/fuzzy repair, platform-splitting safety net (`"Kubernetes on Azure"` → `"Container orchestration"` + `"Azure"`), `seniority_mode` (`target` vs `min`), and whole-team `team_needs` |
+| Deterministic scoring | `matcher/scoring.py`, `matcher/vocab.py` | Hard filters (availability, min years, countries, mobility) never skipped; one concept per requirement; non-compensatory must-haves-first ranking; target vs min seniority curve (Mids first when Mid is asked; overqualified Principals ranked lower & flagged) |
+| Evidence & AI guard | `matcher/evidence.py`, `matcher/explain.py` | Every claim linked to real profile evidence IDs (`S*`, `P*`, `X*`, `C*`, `L*`, `F*`); hallucination guard strips uncited sentences, invented numbers, or unowned skills |
+| Team optimiser | `matcher/team.py` | **OR-Tools CP-SAT** joint solver (~200–400 ms) producing **3 alternatives** (`Best fit`, `Ready now`, `Leanest`), editable **TeamShape** defaults (1+ Lead/Principal anchor, ≤50% Senior+, 1+ Mid at 3+, 1+ mentored Junior at 4+, Senior+ mentor in same area, shared B2+ language, ≤4h time-zone spread, anti-duplicate), whole-team needs, plain-English explanations when a rule can't be met, member roles (`anchor`/`builder`/`learner` + named mentor), and **swap & lock** with exact team-impact deltas |
+| Web UI | `web/src/designs/people/PeopleApp.tsx`, `Profile.tsx`, `Compare.tsx`, `web/src/core/useMatcher.ts` | Chosen People UI at `/`: target/min seniority selector, 3 team alternatives, scorecard, whole-team needs, unmet-rule explanations, collapsible shape editor, Anchor/Builder/Learner + mentor badges, lock/unlock, inline swap alternatives with team-impact deltas, and side-by-side compare |
 
-| Phase | Scope (repos) | Goal | Status | Report |
-|---|---|---|---|---|
-| 0 | hub + all 5 members | Lock read-only contract check (`scripts/check_contracts.py`) verifying exact schemas, row counts, and freshness across `opendata`, `audiences`, `campaigns-discovery`, `ai-catalogs`, and `vistomi` | planned | — |
-| 1 | hub | Build unified read-only DuckDB analytical layer (`sql/` / `scripts/`) joining domains, NAICS/audiences, EU ad activity, and market signals | planned | — |
-| 2 | hub + `ai-catalogs` + `vistomi` | Connect AI citation/catalog data and audience/ad demand signals into unified cross-project briefs for `vistomi` | planned | — |
-
-## Decisions
-
-- **2026-11-19 — Hub architecture:** Created `open-data-hub` as a management + analytical hub (`hub@1.0.0`, hybrid delegation) rather than merging the 5 repositories into a monorepo. Member repos keep owning their collectors, databases, and protocols; this hub owns cross-project contracts, coordination, read-only analytical views, and unified reports.
-
-## Rules for workers (hub-specific)
-
-- Read member sub-project databases, parquet files, and CSVs strictly **read-only**.
-- Never duplicate a member's scraping/collection logic in this hub; dispatch collector changes to the target member repo.
-- Always quote paths when touching `/home/user/orca/projects/campaigns discovery`.
-- Respect `audiences/protocol.md` + `protocol.sha256` — never silently modify `audiences` outputs from hub scripts.
-- Check `docs/CONTRACTS.md` before changing any shared output path, table, or join key.
+## Next steps / remaining hackathon checklist
+- [ ] Visual walkthrough in browser of `/` (3-minute live demo flow).
+- [ ] Commit and push the CP-SAT team forming + seniority matching + updated docs to GitHub (`open-data-hub` / `main` as the team prefers).
+- [ ] Optional cleanup: decide whether to remove leftover Open Data Hub template files (`hub.toml`, `docs/PROJECTS.md`, `docs/CONTRACTS.md`, `docs/reports/`) inherited from initial commit `d6ef2e5`.
+- [ ] Prepare 3-minute pitch script & demo sequence (e.g., GCP hidden talent → Mid seniority match → Core banking 5-person team with Ready now / Edit shape / Swap & lock).

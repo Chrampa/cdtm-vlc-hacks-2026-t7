@@ -41,6 +41,7 @@ def _key() -> str | None:
 @dataclass(frozen=True)
 class Settings:
     data_path: Path
+    projects_db: Path
     web_dist: Path
     llm_base_url: str
     llm_api_key: str | None
@@ -54,6 +55,7 @@ def load_settings() -> Settings:
     default_model = os.environ.get("LLM_MODEL", "deepseek/deepseek-v4.1-flash")
     return Settings(
         data_path=Path(os.environ.get("DATA_PATH", ROOT / "data" / "profiles.parquet")),
+        projects_db=Path(os.environ.get("PROJECTS_DB", ROOT / "data" / "projects.db")),
         web_dist=Path(os.environ.get("WEB_DIST", ROOT / "web" / "dist")),
         llm_base_url=os.environ.get("LLM_BASE_URL", "https://api.ironlane.ai/v1").rstrip("/"),
         llm_api_key=_key(),

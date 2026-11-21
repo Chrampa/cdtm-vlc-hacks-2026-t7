@@ -81,7 +81,7 @@ export function Detail({ c, roleTitle, exp, onClose }: { c: Candidate; roleTitle
                 <div className="grid grid-cols-[170px_120px_1fr] border-b border-r text-[13px]" style={line}>
                   <div className="border-r p-3 font-medium" style={line}>Seniority</div>
                   <div className="flex items-start gap-2 border-r p-3" style={line}><span className="mt-px"><Dot s={c.seniority_check.status} size={12} /></span>{statusWord(c.seniority_check.status)}</div>
-                  <div className="p-3" style={ink2}>{c.seniority_check.actual}; asked {c.seniority_check.required} or above</div>
+                  <div className="p-3" style={ink2}>{c.seniority_check.actual}; asked {c.seniority_check.required}{c.seniority_check.mode === "min" ? " or above" : " (target)"}{c.seniority_check.overqualified ? " · may be overqualified" : ""}</div>
                 </div>
               )}
             </div>

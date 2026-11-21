@@ -192,8 +192,16 @@ class EvidenceBuilder:
 
         seniority = None
         if role.seniority_min:
-            seniority = {"required": role.seniority_min, "actual": p["nivel_seniority"],
-                         "status": _status(float(rs.seniority[i])) if rs.seniority is not None else "covered"}
+            req_idx = vocab.SENIORITY.index(role.seniority_min)
+            act_idx = vocab.SENIORITY.index(p["nivel_seniority"])
+            overq = role.seniority_mode == "target" and act_idx >= req_idx + 2
+            seniority = {
+                "required": role.seniority_min,
+                "mode": role.seniority_mode,
+                "actual": p["nivel_seniority"],
+                "status": _status(float(rs.seniority[i])) if rs.seniority is not None else "covered",
+                "overqualified": overq,
+            }
         penalty = float(rs.penalty[i]) if rs.penalty is not None else 1.0
         card = {
             "employee_id": p["employee_id"],
@@ -241,8 +249,13 @@ class EvidenceBuilder:
         cy = self.s.current_year
         if p["disponibilidad"] == vocab.AVAILABILITY[1]:
             out.append({"text": "Still on another project — frees up within 3 months", "evidence": ["F2"], "severity": 2})
-        if rs.seniority is not None and rs.seniority[i] < 1:
-            out.append({"text": f"Less senior than requested ({p['nivel_seniority']} vs {rs.role.seniority_min})", "evidence": ["F1"], "severity": 2})
+        if rs.seniority is not None and rs.role.seniority_min:
+            req_idx = vocab.SENIORITY.index(rs.role.seniority_min)
+            act_idx = vocab.SENIORITY.index(p["nivel_seniority"])
+            if act_idx < req_idx:
+                out.append({"text": f"Less senior than requested ({p['nivel_seniority']} vs {rs.role.seniority_min})", "evidence": ["F1"], "severity": 2})
+            elif rs.role.seniority_mode == "target" and act_idx >= req_idx + 2:
+                out.append({"text": f"More senior than requested ({p['nivel_seniority']} vs {rs.role.seniority_min}) — may be overqualified", "evidence": ["F1"], "severity": 1})
         for r in reqs:
             if r["importance"] != "must" or r["status"] == "missing":
                 continue

@@ -12,7 +12,7 @@ import numpy as np
 
 from . import vocab
 from .data import Store
-from .schemas import Requirement, RoleSpec
+from .schemas import Requirement, RoleSpec, TeamNeed
 
 
 @dataclass
@@ -69,7 +69,7 @@ class Scorer:
         return mask, funnel
 
     # ------------------------------------------------------- requirements
-    def skill_vector(self, q: Requirement) -> np.ndarray:
+    def skill_vector(self, q: Requirement | TeamNeed) -> np.ndarray:
         s, cat = self.s, self.s.cat
         out = np.zeros(s.n, dtype=np.float32)
         if q.skills:
@@ -120,7 +120,7 @@ class Scorer:
         need = vocab.LANG_LEVEL_RANK.get(min_level or "B2", 4)
         return np.where(lvl >= need, 1.0, np.where(lvl == need - 1, 0.5, np.where(lvl > 0, 0.2, 0.0))).astype(np.float32)
 
-    def soft_vector(self, q: Requirement) -> np.ndarray:
+    def soft_vector(self, q: Requirement | TeamNeed) -> np.ndarray:
         s = self.s
         soft_ids = [s.cat.soft_id[x] for x in q.soft if x in s.cat.soft_id]
         meth_ids = [s.cat.method_id[x] for x in q.soft if x in s.cat.method_id]
@@ -135,7 +135,7 @@ class Scorer:
             out = np.maximum(out, self.skill_vector(q))
         return out
 
-    def requirement_vector(self, q: Requirement) -> np.ndarray:
+    def requirement_vector(self, q: Requirement | TeamNeed) -> np.ndarray:
         if q.unmapped:
             return np.zeros(self.s.n, dtype=np.float32)
         if q.kind == "sector" and q.sector:
@@ -186,7 +186,16 @@ class Scorer:
             den += vocab.ROLE_FIT_WEIGHT
         if role.seniority_min:
             m = vocab.SENIORITY.index(role.seniority_min)
-            rs.seniority = np.where(s.senior >= m, 1.0, np.where(s.senior == m - 1, 0.5, 0.0)).astype(np.float32)
+            diff = s.senior.astype(np.int16) - m
+            if role.seniority_mode == "min":
+                rs.seniority = np.where(diff >= 0, 1.0, np.where(diff == -1, 0.5, 0.0)).astype(np.float32)
+            else:
+                # Target level: exact match is highest; slightly above is good; far above (overqualified) ranks lower.
+                rs.seniority = np.select(
+                    [diff == 0, diff == 1, diff == 2, diff >= 3, diff == -1],
+                    [1.0, 0.60, 0.35, 0.15, 0.40],
+                    default=0.0,
+                ).astype(np.float32)
             num += vocab.SENIORITY_WEIGHT * rs.seniority
             den += vocab.SENIORITY_WEIGHT
         fit = (num / den) if den > 0 else np.zeros(s.n, dtype=np.float32)

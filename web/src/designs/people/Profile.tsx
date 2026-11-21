@@ -35,44 +35,46 @@ export function Profile({ c, roleTitle, exp, onClose }: { c: Candidate; roleTitl
 
   return (
     <div className="v-people fixed inset-0 z-50 flex justify-end bg-black/25" onClick={onClose}>
-      <div ref={panel} onClick={(e) => e.stopPropagation()} className="slide-in h-full w-full max-w-5xl overflow-y-auto" style={{ background: "var(--v-bg)", color: "var(--v-ink)", fontFamily: "var(--v-body)" }}>
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b px-6 py-3 backdrop-blur" style={{ ...line, background: "rgba(246,243,238,.94)" }}>
-          <button onClick={onClose} className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[14px] font-semibold" style={{ color: "var(--v-accent)" }}><ArrowLeft size={16} /> Back to the list</button>
-          <span className="text-[13px]" style={ink2}>Candidate for {roleTitle}</span>
+      <div ref={panel} onClick={(e) => e.stopPropagation()} className="slide-in h-[100dvh] w-full max-w-5xl overflow-y-auto" style={{ background: "var(--v-bg)", color: "var(--v-ink)", fontFamily: "var(--v-body)" }}>
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b px-3 py-2.5 backdrop-blur sm:px-6 sm:py-3" style={{ ...line, background: "rgba(245,248,252,.95)" }}>
+          <button onClick={onClose} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-2 text-[14px] font-semibold" style={{ color: "var(--v-accent)" }}>
+            <ArrowLeft size={16} /> <span>Back</span><span className="hidden sm:inline"> to the list</span>
+          </button>
+          <span className="min-w-0 truncate text-right text-[13px]" style={ink2}>Candidate for {roleTitle}</span>
         </div>
 
-        <div className="grid gap-6 p-6 md:grid-cols-[300px_1fr]">
+        <div className="grid gap-4 p-4 pb-[max(2rem,env(safe-area-inset-bottom))] sm:gap-6 sm:p-6 md:grid-cols-[300px_1fr]">
           <aside className="space-y-4">
-            <div className="rounded-[var(--v-radius)] border bg-white p-6 text-center" style={line}>
-              <div className="flex justify-center"><Avatar c={c} size={96} /></div>
-              <h2 className="mt-4 text-[22px] font-bold leading-7">{c.name}</h2>
-              <p className="mt-1 text-[15px]" style={ink2}>{c.position}</p>
-              <p className="mt-1 inline-flex items-center gap-1 text-[14px]" style={ink2}><MapPin size={13} /> {c.location}</p>
-              <div className="mt-4"><Availability code={c.availability_code} /></div>
-              <div className="mt-5 rounded-2xl py-3" style={{ background: "var(--v-accent-soft)" }}>
-                <div className="text-[28px] font-bold leading-8" style={{ color: "var(--v-accent)" }}>{c.fit}%</div>
+            <div className="rounded-[var(--v-radius)] border bg-white p-5 text-center sm:p-6" style={line}>
+              <div className="flex justify-center"><Avatar c={c} size={84} /></div>
+              <h2 className="mt-3.5 text-[20px] font-bold leading-7 sm:mt-4 sm:text-[22px]">{c.name}</h2>
+              <p className="mt-1 text-[14px] sm:text-[15px]" style={ink2}>{c.position}</p>
+              <p className="mt-1 inline-flex items-center gap-1 text-[13px] sm:text-[14px]" style={ink2}><MapPin size={13} /> {c.location}</p>
+              <div className="mt-3.5 sm:mt-4"><Availability code={c.availability_code} /></div>
+              <div className="mt-4 rounded-2xl py-3 sm:mt-5" style={{ background: "var(--v-accent-soft)" }}>
+                <div className="text-[26px] font-bold leading-8 sm:text-[28px]" style={{ color: "var(--v-accent)" }}>{c.fit}%</div>
                 <div className="text-[13px] font-semibold" style={ink2}>match · {c.must_covered} of {c.must_total} must-haves</div>
               </div>
             </div>
-            <div className="rounded-[var(--v-radius)] border bg-white p-5 text-[14px]" style={line}>
-              <div className="grid grid-cols-[110px_1fr] gap-y-2.5">
+            <div className="rounded-[var(--v-radius)] border bg-white p-4 text-[14px] sm:p-5" style={line}>
+              <div className="grid grid-cols-[92px_1fr] gap-x-2 gap-y-2.5 sm:grid-cols-[110px_1fr]">
                 <span style={ink2}>Experience</span><b>{c.years} years</b>
                 <span style={ink2}>Level</span><b>{c.seniority}</b>
-                <span style={ink2}>Team</span><b>{c.area}</b>
-                <span style={ink2}>Main sector</span><b>{c.sector}</b>
+                <span style={ink2}>Team</span><b className="break-words">{c.area}</b>
+                <span style={ink2}>Main sector</span><b className="break-words">{c.sector}</b>
                 <span style={ink2}>Languages</span><span className="font-semibold">{langs.map((l) => <span key={l.id} ref={reg(l.id)} className="block rounded" style={hlStyle(l.id)}>{l.text}</span>)}</span>
               </div>
             </div>
             {hidden.length > 0 && (
-              <div className="rounded-[var(--v-radius)] p-5 text-[14px]" style={{ background: "var(--v-sun-soft)" }}>
-                <div className="flex items-center gap-1.5 font-bold" style={{ color: "#7A5A0B" }}><Sparkles size={15} /> Found outside the obvious places</div>
+              <div className="rounded-[var(--v-radius)] border p-4 text-[14px] sm:p-5" style={{ background: "var(--v-accent-soft)", borderColor: "rgba(91,192,235,.45)" }}>
+                <div className="flex items-center gap-1.5 font-bold" style={{ color: "var(--v-ink)" }}><Sparkles size={15} style={{ color: "var(--v-accent)" }} /> Found outside the obvious places</div>
                 <ul className="mt-2 space-y-1.5 leading-5">{hidden.map((h) => <li key={h}>{h}</li>)}</ul>
               </div>
             )}
           </aside>
 
-          <section className="min-w-0 space-y-5">
-            <div className="rounded-[var(--v-radius)] border bg-white p-6" style={line}>
+          <section className="min-w-0 space-y-4 sm:space-y-5">
+            <div className="rounded-[var(--v-radius)] border bg-white p-4 sm:p-6" style={line}>
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-2 text-[14px] font-bold" style={{ color: "var(--v-accent)" }}><Sparkles size={15} /> In short</span>
                 {exp && exp !== "loading" && exp.ok && exp.verdict && <span className="rounded-full px-3 py-1 text-[13px] font-bold" style={{ background: "var(--v-accent-soft)", color: "var(--v-accent)" }}>{VERDICT[exp.verdict]}</span>}
@@ -83,27 +85,27 @@ export function Profile({ c, roleTitle, exp, onClose }: { c: Candidate; roleTitl
               {exp && exp !== "loading" && !exp.ok && <p className="mt-2 text-[15px]" style={ink2}>{exp.error}</p>}
               {exp && exp !== "loading" && exp.ok && (
                 <>
-                  <p className="mt-3 text-[17px] leading-8">
+                  <p className="mt-3 text-[15px] leading-7 sm:text-[17px] sm:leading-8">
                     {citedOnce(exp.summary ?? "").map((p, i) => ("t" in p ? <span key={i}>{p.t}</span> : (
                       <button key={i} onClick={() => show(p.id)} className="mx-0.5 rounded-md px-1.5 py-0.5 align-[1px] text-[12px] font-bold hover:brightness-95" style={{ background: "var(--v-accent-soft)", color: "var(--v-accent)" }}>{evLabel(c.evidence, p.id)}</button>
                     )))}
                   </p>
-                  <p className="mt-3 flex items-center gap-1.5 text-[12px]" style={ink2}>
-                    <ShieldCheck size={13} /> Written by AI from this profile. Each sentence is checked against the highlighted sources{exp.removed_claims ? ` (${exp.removed_claims} unsupported statement${exp.removed_claims > 1 ? "s" : ""} removed)` : ""}.
+                  <p className="mt-3 flex items-start gap-1.5 text-[12px]" style={ink2}>
+                    <ShieldCheck size={13} className="mt-0.5 shrink-0" /> <span>Written by AI from this profile. Each sentence is checked against the highlighted sources{exp.removed_claims ? ` (${exp.removed_claims} unsupported statement${exp.removed_claims > 1 ? "s" : ""} removed)` : ""}.</span>
                   </p>
                 </>
               )}
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div className="rounded-[var(--v-radius)] p-5" style={{ background: "var(--v-good-soft)" }}>
+            <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
+              <div className="rounded-[var(--v-radius)] p-4 sm:p-5" style={{ background: "var(--v-good-soft)" }}>
                 <div className="flex items-center gap-2 text-[15px] font-bold" style={{ color: "var(--v-good)" }}><Check size={17} /> What fits</div>
                 <ul className="mt-3 space-y-3 text-[14px]">
                   {fits.length === 0 && <li style={ink2}>No requirement is fully shown.</li>}
                   {fits.map((r) => <li key={r.id}><b>{r.label}</b>{r.importance === "nice" && <span style={ink2}> · nice-to-have</span>}<div className="leading-5" style={ink2}>{r.lines[0]}</div></li>)}
                 </ul>
               </div>
-              <div className="rounded-[var(--v-radius)] p-5" style={{ background: "var(--v-warn-soft)" }}>
+              <div className="rounded-[var(--v-radius)] p-4 sm:p-5" style={{ background: "var(--v-warn-soft)" }}>
                 <div className="flex items-center gap-2 text-[15px] font-bold" style={{ color: "var(--v-warn)" }}><CircleAlert size={17} /> What to check</div>
                 <ul className="mt-3 space-y-3 text-[14px]">
                   {check.map((r) => <li key={r.id}><b>{r.label}</b> — {r.status === "partial" ? "only partly shown" : "not shown"}{r.importance === "nice" && " (nice-to-have)"}<div className="leading-5" style={ink2}>{r.lines[0]}</div></li>)}
@@ -114,15 +116,15 @@ export function Profile({ c, roleTitle, exp, onClose }: { c: Candidate; roleTitl
             </div>
 
             {exp && exp !== "loading" && exp.ok && !!exp.verify?.length && (
-              <div className="rounded-[var(--v-radius)] border bg-white p-5" style={line}>
+              <div className="rounded-[var(--v-radius)] border bg-white p-4 sm:p-5" style={line}>
                 <div className="text-[15px] font-bold">Ask in the interview</div>
-                <ul className="mt-2 list-disc space-y-2 pl-5 text-[15px] leading-6">
+                <ul className="mt-2 list-disc space-y-2 pl-5 text-[14px] leading-6 sm:text-[15px]">
                   {exp.verify.map((v) => <li key={v}>{citedOnce(v).map((p, i) => ("t" in p ? <span key={i}>{p.t}</span> : <button key={i} onClick={() => show(p.id)} className="mx-0.5 rounded-md px-1.5 text-[12px] font-bold" style={{ background: "var(--v-accent-soft)", color: "var(--v-accent)" }}>{evLabel(c.evidence, p.id)}</button>))}</li>)}
                 </ul>
               </div>
             )}
 
-            <div className="rounded-[var(--v-radius)] border bg-white p-6" style={line}>
+            <div className="rounded-[var(--v-radius)] border bg-white p-4 sm:p-6" style={line}>
               <div className="text-[15px] font-bold">Skills</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {skills.map((s) => (
@@ -138,8 +140,8 @@ export function Profile({ c, roleTitle, exp, onClose }: { c: Candidate; roleTitl
               )}
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div className="rounded-[var(--v-radius)] border bg-white p-6" style={line}>
+            <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
+              <div className="rounded-[var(--v-radius)] border bg-white p-4 sm:p-6" style={line}>
                 <div className="text-[15px] font-bold">Career</div>
                 <ol className="relative mt-4 space-y-4 border-l-2 pl-6" style={line}>
                   {jobs.map((j, i) => (
@@ -151,7 +153,7 @@ export function Profile({ c, roleTitle, exp, onClose }: { c: Candidate; roleTitl
                   ))}
                 </ol>
               </div>
-              <div className="rounded-[var(--v-radius)] border bg-white p-6" style={line}>
+              <div className="rounded-[var(--v-radius)] border bg-white p-4 sm:p-6" style={line}>
                 <div className="text-[15px] font-bold">Projects</div>
                 <ul className="mt-3 space-y-3">
                   {projects.map((p) => (

@@ -86,6 +86,30 @@ COUNTRY_EN = {
     "Países Bajos": "Netherlands",
 }
 
+# Approximate standard UTC offset (in integer hours) for team time-zone spread checks.
+COUNTRY_TZ = {
+    "España": 1,
+    "Portugal": 0,
+    "Reino Unido": 0,
+    "Francia": 1,
+    "Italia": 1,
+    "Alemania": 1,
+    "Polonia": 1,
+    "Bélgica": 1,
+    "Países Bajos": 1,
+    "Marruecos": 1,
+    "Rumanía": 2,
+    "India": 5,
+    "Japón": 9,
+    "Brasil": -3,
+    "Argentina": -3,
+    "Chile": -4,
+    "Estados Unidos": -5,
+    "Colombia": -5,
+    "Perú": -5,
+    "México": -6,
+}
+
 # Employers whose name itself tells the client sector. Consultancies, freelancers and
 # start-ups are deliberately left out: working there says nothing about a sector.
 EMPLOYER_SECTOR = {
@@ -117,7 +141,7 @@ MATCH_WEIGHT = {
 IMPORTANCE_WEIGHT = {"must": 3.0, "nice": 1.0}
 SOFT_FACTOR = 0.5  # soft skills are self-declared and weakly informative
 ROLE_FIT_WEIGHT = 1.5
-SENIORITY_WEIGHT = 1.5
+SENIORITY_WEIGHT = 3.5
 # Must-haves don't compensate for each other: people are ranked by must-haves shown first, then fit.
 COVERED = 0.7
 PARTIAL = 0.3

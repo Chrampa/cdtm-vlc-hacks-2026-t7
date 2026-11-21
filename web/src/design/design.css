@@ -14,10 +14,11 @@
   --v-display: "Inter", system-ui, sans-serif; --v-body: "Inter", system-ui, sans-serif; --v-num: "JetBrains Mono", ui-monospace, monospace;
 }
 .v-people {
-  --v-bg: #F6F3EE; --v-surface: #FFFFFF; --v-surface2: #FBF9F6; --v-ink: #1F2328; --v-ink2: #626A73; --v-line: #EAE4DA;
-  --v-accent: #0E7C6B; --v-accent-soft: #E2F3EF; --v-on-accent: #FFFFFF;
-  --v-good: #0E7C6B; --v-good-soft: #E2F3EF; --v-warn: #A4541A; --v-warn-soft: #FCEBDD; --v-bad: #B9442A; --v-bad-soft: #FBE6DF;
-  --v-sun: #F2B84B; --v-sun-soft: #FDF3DC; --v-radius: 18px;
+  --v-bg: #F5F8FC; --v-surface: #FFFFFF; --v-surface2: #F5F8FC; --v-ink: #003B6F; --v-ink2: #4A6583; --v-line: #D6E4F2;
+  --v-accent: #0072BC; --v-accent-deep: #003B6F; --v-accent-soft: #E1EDF8; --v-on-accent: #FFFFFF;
+  --v-cyan: #5BC0EB; --v-cyan-soft: #E6F6FD;
+  --v-good: #0E7C6B; --v-good-soft: #E2F5F0; --v-warn: #A4541A; --v-warn-soft: #FCEBDD; --v-bad: #B9442A; --v-bad-soft: #FBE6DF;
+  --v-sun: #5BC0EB; --v-sun-soft: #E1EDF8; --v-radius: 18px;
   --v-display: "Plus Jakarta Sans", system-ui, sans-serif; --v-body: "Plus Jakarta Sans", system-ui, sans-serif; --v-num: "Plus Jakarta Sans", system-ui, sans-serif;
 }
 .v-spotlight {

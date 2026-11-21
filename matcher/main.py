@@ -22,7 +22,18 @@ from .examples import EXAMPLES
 from .explain import Explainer
 from .interpret import Interpreter
 from .llm import LLMClient
-from .schemas import BriefSpec, ExplainRequest, InterpretRequest, RoleSpec, SearchRequest
+from .projects import ProjectStore
+from .schemas import (
+    BriefSpec,
+    ExplainRequest,
+    InterpretRequest,
+    ProjectCreate,
+    ProjectUpdate,
+    RoleSpec,
+    SearchRequest,
+    TeamOptionId,
+    TeamShape,
+)
 from .scoring import RoleScores, Scorer
 from .team import build_team, complement
 
@@ -33,6 +44,7 @@ settings = load_settings()
 
 class App:
     store: Store
+    projects: ProjectStore
     scorer: Scorer
     evidence: EvidenceBuilder
     llm: LLMClient
@@ -47,17 +59,19 @@ state = App()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     state.store = Store(settings.data_path)
+    state.projects = ProjectStore(settings.projects_db)
     state.scorer = Scorer(state.store)
     state.evidence = EvidenceBuilder(state.store)
     state.llm = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_concurrency)
     state.interpreter = Interpreter(state.store, state.llm, settings.model_interpret)
     state.explainer = Explainer(state.store, state.llm, settings.model_explain, settings.model_team)
     state.role_cache = OrderedDict()
-    log.info("AI %s (interpret=%s, explain=%s, team=%s)",
+    log.info("AI %s (interpret=%s, explain=%s, team=%s), %d saved projects",
              "enabled" if state.llm.available else "DISABLED", settings.model_interpret,
-             settings.model_explain, settings.model_team)
+             settings.model_explain, settings.model_team, state.projects.count())
     yield
     await state.llm.close()
+    state.projects.close()
 
 
 app = FastAPI(title="Talent Matcher", lifespan=lifespan)
@@ -91,6 +105,12 @@ def ensure_ids(spec: BriefSpec) -> BriefSpec:
                 q.id = f"{role.id}q{qi + 1}"
             seen.add(q.id)
             q.unmapped = not (q.skills or q.certs or q.sector or q.language or q.soft)
+    seen_tn: set[str] = set()
+    for ti, tn in enumerate(spec.team_needs):
+        if not tn.id or tn.id in seen_tn:
+            tn.id = f"tn{ti + 1}"
+        seen_tn.add(tn.id)
+        tn.unmapped = not (tn.skills or tn.certs or tn.sector or tn.language or tn.soft)
     return spec
 
 
@@ -107,13 +127,33 @@ def lite(card: dict) -> dict:
     return {k: card[k] for k in ("employee_id", "name", "role", "seniority", "availability", "fit", "location")}
 
 
-def run_search(spec: BriefSpec, limit: int) -> dict:
+def swap_lite(card: dict) -> dict:
+    return {
+        k: card[k]
+        for k in (
+            "employee_id", "name", "role", "position", "area", "seniority",
+            "availability", "availability_code", "fit", "location", "must_covered", "must_total",
+        )
+    }
+
+
+def run_search(
+    spec: BriefSpec,
+    limit: int,
+    team_shape: TeamShape | None = None,
+    locks: dict[str, str] | None = None,
+    option: TeamOptionId = "best_fit",
+) -> dict:
     t0 = time.perf_counter()
     store, scorer, evb = state.store, state.scorer, state.evidence
     scored = [scored_role(r) for r in spec.roles]
+    rs_by_id = {rs.role.id: rs for rs in scored}
     multi = len(spec.roles) > 1 or any(r.count > 1 for r in spec.roles)
     if multi:
-        team = build_team(scorer, scored, per_role=limit)
+        team = build_team(
+            scorer, scored, per_role=limit, team_needs=spec.team_needs,
+            shape=team_shape, locks=locks, active_option=option,
+        )
         lists, proposed = team["lists"], team["proposed"]
     else:
         team = None
@@ -129,13 +169,22 @@ def run_search(spec: BriefSpec, limit: int) -> dict:
             if c:
                 complements[rs.role.id] = {"for": person, **c}
 
-    need = listed | {c["idx"] for c in complements.values()}
+    need = set(listed) | {c["idx"] for c in complements.values()}
+    if team:
+        for opt in team.get("options", []):
+            for m in opt["members"]:
+                if m["idx"] is not None:
+                    need.add(m["idx"])
+                for sw in m["swaps"]:
+                    need.add(sw["idx"])
     profiles = store.profiles(sorted(need))
 
+    kw_by_role: dict[str, tuple[list[str], int | None, set[int]]] = {}
     roles_out = []
     for rs in scored:
         terms = keyword_terms(rs.role)
         kw_count, kw_hits = store.keyword_matches(terms, rs.eligible) if terms else (None, set())
+        kw_by_role[rs.role.id] = (terms, kw_count, kw_hits)
         cards = []
         for i in lists.get(rs.role.id, []):
             card = evb.card(rs, i, profiles[i], keyword_hit=(i in kw_hits) if terms else None, full=True)
@@ -158,9 +207,54 @@ def run_search(spec: BriefSpec, limit: int) -> dict:
             "candidates": cards,
             "complement": comp,
         })
+
+    team_out = None
+    if team:
+        card_cache: dict[tuple[str, int, bool], dict] = {}
+
+        def get_card(role_id: str, idx: int, full: bool) -> dict:
+            ck = (role_id, idx, full)
+            if ck not in card_cache:
+                rs = rs_by_id[role_id]
+                terms, _, kw_hits = kw_by_role[role_id]
+                c = evb.card(rs, idx, profiles[idx], keyword_hit=(idx in kw_hits) if terms else None, full=full)
+                c["proposed"] = idx in proposed.get(role_id, [])
+                card_cache[ck] = c
+            return card_cache[ck]
+
+        hydrated_opts = []
+        for opt in team["options"]:
+            h_members = []
+            for m in opt["members"]:
+                idx = m["idx"]
+                cand_card = get_card(m["role_id"], idx, True) if idx is not None else None
+                h_swaps = []
+                for sw in m["swaps"]:
+                    sc = get_card(m["role_id"], sw["idx"], False)
+                    h_swaps.append({
+                        "candidate": swap_lite(sc),
+                        "fit_delta": sw["fit_delta"],
+                        "bench_delta": sw["bench_delta"],
+                        "tz_delta": sw["tz_delta"],
+                        "impact": sw["impact"],
+                    })
+                h_members.append({
+                    "slot_id": m["slot_id"],
+                    "role_id": m["role_id"],
+                    "slot_label": m["slot_label"],
+                    "team_role": m["team_role"],
+                    "mentor": m["mentor"],
+                    "locked": m["locked"],
+                    "candidate": cand_card,
+                    "swaps": h_swaps,
+                })
+            hydrated_opts.append({**opt, "members": h_members})
+
+        team_out = {**team["stats"], "options": hydrated_opts}
+
     out = {
         "roles": roles_out,
-        "team": team["stats"] if team else None,
+        "team": team_out,
         "multi": multi,
         "seconds": round(time.perf_counter() - t0, 3),
     }
@@ -181,6 +275,7 @@ async def meta():
         "available_now": int((s.avail == 0).sum()),
         "available_soon": int((s.avail == 1).sum()),
         "ai": state.llm.available,
+        "projects_count": state.projects.count(),
         "models": {"interpret": settings.model_interpret, "explain": settings.model_explain, "team": settings.model_team},
         "examples": EXAMPLES,
         "catalog": {
@@ -189,6 +284,43 @@ async def meta():
             "languages": [{"value": x, "label": vocab.LANGUAGE_EN.get(x, x)} for x in s.cat.languages],
         },
     }
+
+
+@app.get("/api/projects")
+async def list_projects():
+    return [p.model_dump() for p in state.projects.list()]
+
+
+@app.post("/api/projects", status_code=201)
+async def create_project(req: ProjectCreate):
+    if not req.spec.roles:
+        raise HTTPException(400, "A project needs at least one role")
+    return state.projects.create(req).model_dump()
+
+
+@app.get("/api/projects/{project_id}")
+async def get_project(project_id: str):
+    proj = state.projects.get(project_id)
+    if proj is None:
+        raise HTTPException(404, "Project not found")
+    return proj.model_dump()
+
+
+@app.put("/api/projects/{project_id}")
+async def update_project(project_id: str, req: ProjectUpdate):
+    if req.spec is not None and not req.spec.roles:
+        raise HTTPException(400, "A project needs at least one role")
+    proj = state.projects.update(project_id, req)
+    if proj is None:
+        raise HTTPException(404, "Project not found")
+    return proj.model_dump()
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    if not state.projects.delete(project_id):
+        raise HTTPException(404, "Project not found")
+    return {"ok": True, "id": project_id}
 
 
 @app.post("/api/interpret")
@@ -202,7 +334,7 @@ async def search(req: SearchRequest):
     spec = ensure_ids(req.spec)
     if not spec.roles:
         raise HTTPException(400, "The brief has no roles")
-    return await run_in_threadpool(run_search, spec, req.limit)
+    return await run_in_threadpool(run_search, spec, req.limit, req.team_shape, req.locks, req.option)
 
 
 async def _card_for(req: ExplainRequest) -> tuple[RoleSpec, dict]:
