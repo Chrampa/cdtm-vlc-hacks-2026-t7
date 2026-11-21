@@ -40,46 +40,34 @@ Write:
 Facts about the current role, availability, location and main sector are F1-F4: cite them too.
 Hard rules: use ONLY the evidence lines. Any number you write must appear in the evidence you cite. Never mention a skill, certification, employer, project or language that is not in the evidence, except to say it is missing. Do not invent numbers. No marketing language."""
 
+_POINT = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "text": {"type": "string"}},
+    "required": ["name", "text"],
+    "additionalProperties": False,
+}
 TEAM_SCHEMA = {
     "type": "object",
     "properties": {
         "verdict": {"type": "string", "enum": ["strong", "solid", "mixed", "weak"]},
-        "headline": {"type": "string"},
-        "members": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"name": {"type": "string"}, "strength": {"type": "string"}, "concern": {"type": "string"}},
-                "required": ["name", "strength", "concern"],
-                "additionalProperties": False,
-            },
-        },
-        "watch": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"name": {"type": "string"}, "text": {"type": "string"}},
-                "required": ["name", "text"],
-                "additionalProperties": False,
-            },
-        },
-        "actions": {"type": "array", "items": {"type": "string"}},
+        "pros": {"type": "array", "items": _POINT},
+        "cons": {"type": "array", "items": _POINT},
     },
-    "required": ["verdict", "headline", "members", "watch", "actions"],
+    "required": ["verdict", "pros", "cons"],
     "additionalProperties": False,
 }
-TEAM_SYSTEM = """You review a proposed project team for a busy HR staffing manager who only scans. Be extremely brief.
+TEAM_SYSTEM = """You review a proposed project team for a busy HR staffing manager who only scans. Answer as short pros and cons.
 You get each position, the person proposed for it, their fit score, the must-haves they cover and the gaps. The assignment was computed by an optimiser that never repeats a person and respects availability.
 
 Return:
 - verdict: "strong" (covers the brief well), "solid" (good with minor gaps), "mixed" (clear weak spots), or "weak".
-- headline: ONE line, max 10 words, no names, e.g. "Strong mainframe core; data role is the weak spot".
-- members: one entry per proposed person (use the exact name given):
-  strength = their key contribution in 2-3 words (e.g. "COBOL veteran", "Azure landing zones");
-  concern = their main gap or risk in 2-4 words, or "" if none (e.g. "SQL not proven", "Starts in 3 months").
-- watch: up to 3 team-level risks, each {name: the person concerned or "" for the whole team, text: max 6 words}.
-- actions: up to 2 next steps, each max 8 words, imperative (e.g. "Check Mirta's SQL in the interview").
-Use only the information given; do not invent facts; no percentages."""
+- pros: 3 or 4 strengths, most important first.
+- cons: 1 to 4 weaknesses or risks, most important first (only real ones; never invent a con).
+Each point is {name, text}:
+  name = the exact name of the one person it is about, or "" if it is about the whole team;
+  text = max 6 plain words an HR person understands, no names, no percentages, no jargon,
+         e.g. "Deep Azure architecture experience", "Data migration not proven", "Starts within 3 months", "Everyone speaks English".
+Use only the information given; do not invent facts."""
 
 # Catalog skills that are also everyday words; mentioning them is not a skill claim.
 _GENERIC = {
@@ -226,27 +214,28 @@ class Explainer:
             return " ".join(words[:n]) + ("…" if len(words) > n else "")
 
         verdict = out.get("verdict") if out.get("verdict") in ("strong", "solid", "mixed", "weak") else "mixed"
-        headline = clip(out.get("headline", ""), 12)
-        members = [
-            {"name": m["name"], "strength": clip(m.get("strength", ""), 4), "concern": clip(m.get("concern", ""), 5)}
-            for m in (out.get("members") or []) if m.get("name") in names
-        ]
-        watch = [
-            {"name": w.get("name") if w.get("name") in names else "", "text": clip(w.get("text", ""), 8)}
-            for w in (out.get("watch") or []) if (w.get("text") or "").strip()
-        ][:3]
-        actions = [clip(a, 10) for a in (out.get("actions") or []) if a.strip()][:2]
+
+        def points(key: str, limit: int) -> list[dict]:
+            seen: set[str] = set()
+            res = []
+            for pt in out.get(key) or []:
+                text = clip(pt.get("text", ""), 7)
+                if not text or text.lower() in seen:
+                    continue
+                seen.add(text.lower())
+                res.append({"name": pt.get("name") if pt.get("name") in names else "", "text": text})
+            return res[:limit]
+
+        pros, cons = points("pros", 4), points("cons", 4)
         return {
             "ok": True,
             "verdict": verdict,
-            "headline": headline,
-            "members": members,
-            "watch": watch,
-            "actions": actions,
+            "pros": pros,
+            "cons": cons,
             # Plain-text fields kept for older views.
-            "summary": headline,
-            "risks": [f"{w['name']}: {w['text']}" if w["name"] else w["text"] for w in watch],
-            "suggestions": actions,
+            "summary": "; ".join(pt["text"] for pt in pros[:2]),
+            "risks": [f"{pt['name']}: {pt['text']}" if pt["name"] else pt["text"] for pt in cons],
+            "suggestions": [],
             "model": meta["model"],
             "seconds": meta["seconds"],
         }

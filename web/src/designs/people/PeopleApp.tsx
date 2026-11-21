@@ -19,6 +19,8 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   Users,
   X,
@@ -505,7 +507,7 @@ const VERDICT_META: Record<string, { label: string; tone: "good" | "warn" | "bad
   weak: { label: "Weak team", tone: "bad" },
 };
 
-/** AI review as a glance: verdict, one headline, one strength + one concern per person, short actions. */
+/** AI review as two short lists: pros on the left, cons on the right. */
 function AIReview({ m, opt, onOpen }: { m: Matcher; opt: TeamOption; onOpen: (roleId: string, c: Candidate) => void }) {
   const review = m.review;
   const byName = new Map(opt.members.filter((x) => x.candidate).map((x) => [x.candidate!.name, x]));
@@ -513,56 +515,70 @@ function AIReview({ m, opt, onOpen }: { m: Matcher; opt: TeamOption; onOpen: (ro
     return (
       <Card className="p-4 fade-in">
         <div className="flex items-center gap-2 text-[13px] font-semibold" style={ink3}><Spinner size={13} /> AI is reviewing the team…</div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">{opt.members.map((x) => <div key={x.slot_id} className="shimmer h-[72px] rounded-md" />)}</div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {[0, 1].map((i) => <div key={i} className="space-y-2 rounded-md p-3" style={{ background: "var(--v-chip)" }}>{[0, 1, 2].map((j) => <div key={j} className="shimmer h-5 rounded-[2px]" />)}</div>)}
+        </div>
       </Card>
     );
   }
   if (!review.ok) return <Card className="p-4 text-[14px]" style={ink2}>{review.error}</Card>;
 
-  const members = review.members ?? [];
-  const watch = review.watch ?? [];
   const meta = VERDICT_META[review.verdict ?? "mixed"] ?? VERDICT_META.mixed;
-  const teamWatch = watch.filter((w) => !w.name);
-  const concernFor = (name: string, own: string) => own || watch.find((w) => w.name === name)?.text || "";
+  const column = (kind: "pro" | "con", items: { name: string; text: string }[]) => {
+    const pro = kind === "pro";
+    const color = pro ? "var(--v-good)" : "var(--v-warn)";
+    return (
+      <div className="rounded-md p-3 sm:p-4" style={{ background: pro ? "var(--v-good-soft)" : "var(--v-warn-soft)" }}>
+        <div className="flex items-center gap-2 text-[13px] font-bold" style={{ color }}>
+          {pro ? <ThumbsUp size={15} /> : <ThumbsDown size={15} />} {pro ? "Pros" : "Cons"}
+          <span className="ml-auto grid size-6 place-items-center rounded-md bg-white text-[12px]">{items.length}</span>
+        </div>
+        {items.length === 0 ? (
+          <p className="mt-3 text-[13px]" style={ink3}>{pro ? "No clear strengths" : "Nothing stands out"}</p>
+        ) : (
+          <ul className="mt-2.5 space-y-1.5">
+            {items.map((it) => {
+              const mem = it.name ? byName.get(it.name) : undefined;
+              const c = mem?.candidate;
+              return (
+                <li key={`${it.name}|${it.text}`}>
+                  <button
+                    disabled={!c}
+                    onClick={() => c && mem && onOpen(mem.role_id, c)}
+                    className="flex w-full items-center gap-2.5 rounded-md bg-white px-2.5 py-2 text-left transition-shadow enabled:hover:shadow-[0_4px_14px_rgba(31,35,40,.08)] disabled:cursor-default"
+                  >
+                    <span className="grid size-5 shrink-0 place-items-center rounded-[4px] text-white" style={{ background: color }}>
+                      {pro ? <Check size={13} strokeWidth={3} /> : <X size={13} strokeWidth={3} />}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[14px] font-semibold leading-5">{it.text}</span>
+                    {c ? (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 text-[12px] font-semibold" style={ink3} title={`${c.name} · ${mem!.slot_label}`}>
+                        {first(c.name)} <Avatar c={c} size={22} />
+                      </span>
+                    ) : (
+                      <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold" style={ink3}>Team <Users size={14} /></span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    );
+  };
 
   return (
     <Card className="p-4 sm:p-5 fade-in">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="inline-flex items-center gap-1.5 text-[12px] font-bold" style={ink3}><Sparkles size={13} style={{ color: "var(--v-accent)" }} /> AI review</span>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold"><Sparkles size={14} style={{ color: "var(--v-accent)" }} /> AI review</span>
         <Chip tone={meta.tone}>{meta.tone === "good" ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />} {meta.label}</Chip>
-        <span className="text-[15px] font-bold leading-6">{review.headline || review.summary}</span>
       </div>
-
-      {members.length > 0 && (
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-          {members.map((r) => {
-            const mem = byName.get(r.name);
-            const c = mem?.candidate;
-            const concern = concernFor(r.name, r.concern);
-            return (
-              <button key={r.name} onClick={() => c && mem && onOpen(mem.role_id, c)} className="flex flex-col justify-start rounded-md border p-3 text-left transition-colors hover:border-[var(--v-accent)]" style={{ ...line, background: concern ? "var(--v-warn-soft)" : "#fff" }}>
-                <div className="flex items-center gap-2">
-                  {c ? <Avatar c={c} size={28} /> : <Users size={18} style={ink3} />}
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-bold">{first(r.name)}</div>
-                    {mem && <div className="truncate text-[11px]" style={ink3}>{mem.slot_label}</div>}
-                  </div>
-                </div>
-                <div className="mt-2 flex items-start gap-1.5 text-[12px] font-semibold" style={{ color: "var(--v-good)" }}><Check size={13} strokeWidth={3} className="mt-[1px] shrink-0" /> {r.strength}</div>
-                {concern && <div className="mt-1 flex items-start gap-1.5 text-[12px] font-semibold" style={{ color: "var(--v-warn)" }}><AlertCircle size={13} className="mt-[1px] shrink-0" /> {concern}</div>}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {(teamWatch.length > 0 || (review.actions?.length ?? 0) > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {teamWatch.map((w) => <Chip key={w.text} tone="warn"><AlertCircle size={12} /> {w.text}</Chip>)}
-          {review.actions?.map((a) => <Chip key={a} tone="accent"><ArrowRight size={12} /> {a}</Chip>)}
-        </div>
-      )}
-      <p className="mt-3 text-[11px]" style={ink3}>Written by AI from the team data · click a person for the evidence</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {column("pro", review.pros ?? [])}
+        {column("con", review.cons ?? [])}
+      </div>
+      <p className="mt-3 text-[11px]" style={ink3}>Written by AI from the team data · click a person to see the evidence</p>
     </Card>
   );
 }

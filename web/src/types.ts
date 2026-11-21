@@ -269,10 +269,8 @@ export interface Explanation {
 export interface TeamReview {
   ok: boolean;
   verdict?: "strong" | "solid" | "mixed" | "weak";
-  headline?: string;
-  members?: { name: string; strength: string; concern: string }[];
-  watch?: { name: string; text: string }[];
-  actions?: string[];
+  pros?: { name: string; text: string }[];
+  cons?: { name: string; text: string }[];
   summary?: string;
   risks?: string[];
   suggestions?: string[];
