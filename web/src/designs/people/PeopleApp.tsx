@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowRight,
+  Briefcase,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   Clock,
   Copy,
   Globe,
+  History,
   Menu as MenuIcon,
   Minus,
   MoreHorizontal,
@@ -28,12 +30,12 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { availText, copyText, first, fitWord, fmt, mustGaps, OPTION_NAME, plainImpacts, rankCandidates, whyLine } from "../../core/helpers";
 import type { Matcher } from "../../core/useMatcher";
-import type { Availability, Candidate, Requirement, RoleResult, RoleSpec, SeniorityMode, TeamMember, TeamOption, TeamShape } from "../../types";
+import type { Availability, Candidate, Project, Requirement, RoleResult, RoleSpec, SeniorityMode, TeamMember, TeamOption, TeamShape } from "../../types";
 import { Compare } from "./Compare";
 import { Profile, type ProfileAction } from "./Profile";
-import { Faces, ProjectsList, SeatsBar, relativeTime } from "./Projects";
+import { Faces, ProjectsList, SeatsBar, isProject, relativeTime } from "./Projects";
 import { Sidebar } from "./Sidebar";
-import { AvailDot, Avatar, Btn, Card, Chip, Drawer, FitMeter, GemTag, Logo, Menu, MustDots, Spinner, StatusChip, StatusIcon, availColor, ink2, ink3, line } from "./ui";
+import { AvailDot, Avatar, Btn, Card, Chip, Drawer, FitMeter, GemTag, Logo, Menu, MustDots, Spinner, StatusIcon, availColor, ink2, ink3, line } from "./ui";
 
 // ------------------------------------------------------------------ shell
 export default function PeopleApp({ m }: { m: Matcher }) {
@@ -81,7 +83,8 @@ function Home({ m, showLogo }: { m: Matcher; showLogo?: boolean }) {
     if (window.matchMedia("(min-width: 640px)").matches) ref.current?.focus();
   }, []);
   const ready = m.brief.trim().length >= 10;
-  const recent = m.projects.slice(0, 3);
+  const myProjects = m.projects.filter(isProject).slice(0, 4);
+  const recent = m.projects.filter((p) => !isProject(p)).slice(0, 3);
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-20 pt-6 fade-in sm:px-6 sm:pt-16">
@@ -121,26 +124,14 @@ function Home({ m, showLogo }: { m: Matcher; showLogo?: boolean }) {
         </div>
       )}
 
-      {recent.length > 0 && (
-        <section className="mt-12">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[13px] font-bold" style={ink3}>Continue</h2>
-            <Btn variant="link" small onClick={m.goProjects}>All projects</Btn>
+      {(myProjects.length > 0 || recent.length > 0) && (
+        <div className="mt-12 space-y-6">
+          <div className="flex items-center justify-end">
+            <Btn variant="link" small onClick={m.goProjects}>All projects &amp; searches</Btn>
           </div>
-          <Card className="mt-2 overflow-hidden">
-            {recent.map((p) => (
-              <button key={p.id} onClick={() => m.openProject(p.id)} className="flex w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 hover:bg-[var(--v-chip)]" style={line}>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-bold">{p.title}</div>
-                  <div className="text-[12px]" style={ink3}>{relativeTime(p.updated_at)}</div>
-                </div>
-                <span className="hidden sm:block"><Faces p={p} max={4} size={24} /></span>
-                <SeatsBar p={p} />
-                <StatusChip status={p.status} />
-              </button>
-            ))}
-          </Card>
-        </section>
+          {myProjects.length > 0 && <HomeList m={m} title="Your projects" project list={myProjects} />}
+          {recent.length > 0 && <HomeList m={m} title="Recent searches" list={recent} />}
+        </div>
       )}
 
       {m.meta && (
@@ -149,6 +140,28 @@ function Home({ m, showLogo }: { m: Matcher; showLogo?: boolean }) {
         </p>
       )}
     </main>
+  );
+}
+
+function HomeList({ m, title, list, project }: { m: Matcher; title: string; list: Project[]; project?: boolean }) {
+  return (
+    <section>
+      <h2 className="flex items-center gap-1.5 text-[13px] font-bold" style={project ? { color: "var(--v-good)" } : ink3}>
+        {project ? <Briefcase size={14} /> : <History size={14} />} {title}
+      </h2>
+      <Card className="mt-2 overflow-hidden" style={project ? { borderColor: "var(--v-good)" } : undefined}>
+        {list.map((p) => (
+          <button key={p.id} onClick={() => m.openProject(p.id)} className="flex w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 hover:bg-[var(--v-chip)]" style={line}>
+            <div className="min-w-0 flex-1">
+              <div className={`truncate text-[14px] ${project ? "font-bold" : "font-semibold"}`}>{p.title}</div>
+              <div className="text-[12px]" style={ink3}>{relativeTime(p.updated_at)}</div>
+            </div>
+            <span className="hidden sm:block"><Faces p={p} max={4} size={24} /></span>
+            <SeatsBar p={p} />
+          </button>
+        ))}
+      </Card>
+    </section>
   );
 }
 
@@ -396,7 +409,7 @@ function Header({ m, teamView, role, roleSpec, onAddRole }: { m: Matcher; teamVi
   const multi = result.multi;
   const opt = m.activeTeamOption;
   const filled = multi ? opt?.members.filter((x) => x.candidate).length ?? 0 : role && m.locks[`${role.id}#0`] ? 1 : 0;
-  const confirmed = m.activeProject?.status === "staffed" && !m.dirty;
+  const confirmed = m.activeProject?.status === "staffed";
   const copy = async () => { await copyText(teamSummaryText(m)); };
   const [copied, setCopied] = useState(false);
 
@@ -407,9 +420,9 @@ function Header({ m, teamView, role, roleSpec, onAddRole }: { m: Matcher; teamVi
         {copied ? <Check size={14} /> : <Copy size={14} />} <span className="hidden sm:inline">{copied ? "Copied" : "Copy summary"}</span>
       </Btn>
       {confirmed ? (
-        <Chip tone="good"><CheckCircle2 size={13} /> {multi ? "Team confirmed" : "Confirmed"}</Chip>
+        <Chip tone="good" title="Kept in Projects. Changes are saved automatically."><CheckCircle2 size={13} /> Project</Chip>
       ) : (
-        <Btn variant="primary" small disabled={!m.activeProjectId || m.savingProject || m.refreshing || filled === 0} onClick={() => m.confirmTeam()} title={filled === 0 ? "Pick someone first" : undefined}>
+        <Btn variant="primary" small disabled={!m.activeProjectId || m.savingProject || m.refreshing || filled === 0} onClick={() => m.confirmTeam()} title={filled === 0 ? "Pick someone first" : "Confirm and keep it in Projects"}>
           <Check size={15} strokeWidth={3} /> {multi ? "Confirm team" : "Confirm pick"}
         </Btn>
       )}
@@ -417,7 +430,7 @@ function Header({ m, teamView, role, roleSpec, onAddRole }: { m: Matcher; teamVi
         trigger={<button aria-label="More" className="grid size-8 place-items-center rounded-md hover:bg-[var(--v-chip)]" style={ink2}><MoreHorizontal size={18} /></button>}
         items={[
           { label: <><Plus size={14} /> Add a role</>, onClick: onAddRole },
-          ...(m.activeProjectId ? [{ label: <><Trash2 size={14} /> Delete project</>, danger: true, onClick: () => { if (window.confirm("Delete this project?")) m.deleteProject(m.activeProjectId!); } }] : []),
+          ...(m.activeProjectId ? [{ label: <><Trash2 size={14} /> {confirmed ? "Delete project" : "Delete search"}</>, danger: true, onClick: () => { if (window.confirm(confirmed ? "Delete this project?" : "Delete this search?")) m.deleteProject(m.activeProjectId!); } }] : []),
         ]}
       />
     </div>
