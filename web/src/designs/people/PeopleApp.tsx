@@ -33,6 +33,7 @@ import { Compare } from "./Compare";
 import { Profile, type ProfileAction } from "./Profile";
 import { Faces, ProjectsList, SeatsBar, relativeTime } from "./Projects";
 import { Sidebar } from "./Sidebar";
+import { canRecord, ListenButton, MicButton } from "./Voice";
 import { AvailDot, Avatar, Btn, Card, Chip, Drawer, FitMeter, GemTag, Logo, Menu, MustDots, Spinner, StatusChip, StatusIcon, availColor, ink2, ink3, line } from "./ui";
 
 // ------------------------------------------------------------------ shell
@@ -82,12 +83,13 @@ function Home({ m, showLogo }: { m: Matcher; showLogo?: boolean }) {
   }, []);
   const ready = m.brief.trim().length >= 10;
   const recent = m.projects.slice(0, 3);
+  const voice = !!m.meta?.voice && canRecord();
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-20 pt-6 fade-in sm:px-6 sm:pt-16">
       {showLogo && <div className="mb-10 hidden lg:block"><Logo height={30} /></div>}
       <h1 className="v-display text-[32px] font-bold leading-10 tracking-tight sm:text-[42px] sm:leading-[50px]">Who do you need?</h1>
-      <p className="mt-2 text-[16px] leading-7" style={ink2}>Describe a role or a whole team in your own words.</p>
+      <p className="mt-2 text-[16px] leading-7" style={ink2}>Describe a role or a whole team in your own words{voice ? ", typed or spoken" : ""}.</p>
 
       <form className="mt-6" onSubmit={(e) => { e.preventDefault(); if (ready) m.submit(); }}>
         <div className="rounded-[var(--v-radius)] border bg-white shadow-[0_12px_32px_rgba(31,35,40,.06)] focus-within:border-[var(--v-accent)]" style={line}>
@@ -103,8 +105,9 @@ function Home({ m, showLogo }: { m: Matcher; showLogo?: boolean }) {
             placeholder="e.g. A data engineer with Google Cloud for an insurance client, free within two months. Spanish and English."
             className="block w-full resize-none rounded-[var(--v-radius)] bg-transparent px-5 py-4 text-[16px] leading-7 outline-none placeholder:text-[var(--v-ink3)]"
           />
-          <div className="flex justify-end px-3 pb-3">
-            <Btn variant="primary" type="submit" disabled={!ready} className="w-full sm:w-auto !px-6 !py-3 !text-[15px]">Find people <ArrowRight size={17} /></Btn>
+          <div className="flex flex-wrap items-center justify-end gap-2 px-3 pb-3">
+            {voice && <MicButton className="mr-auto" onText={(t) => { m.setBrief(m.brief.trim() ? `${m.brief.trimEnd()} ${t}` : t); ref.current?.focus(); }} />}
+            <Btn variant="primary" type="submit" disabled={!ready} className="flex-1 sm:flex-none !px-6 !py-3 !text-[15px]">Find people <ArrowRight size={17} /></Btn>
           </div>
         </div>
       </form>
@@ -507,6 +510,22 @@ const VERDICT_META: Record<string, { label: string; tone: "good" | "warn" | "bad
   weak: { label: "Weak team", tone: "bad" },
 };
 
+/**
+ * The review as a ~7-second read-out: the verdict, the single biggest strength and the single
+ * biggest risk (the AI lists both most-important-first). Everything else stays on screen.
+ */
+function spokenReview(verdict: string, pros: { name: string; text: string }[], cons: { name: string; text: string }[]) {
+  const say = (it: { name: string; text: string }) => {
+    const t = it.text.replace(/…$/, "");
+    return it.name ? `${first(it.name)}, ${t}` : t; // keep case: "SQL" must stay an acronym
+  };
+  return [
+    `${verdict}.`,
+    pros[0] ? `Best: ${say(pros[0])}.` : "",
+    cons[0] ? `Risk: ${say(cons[0])}.` : "No real risks.",
+  ].filter(Boolean).join(" ");
+}
+
 /** AI review as two short lists: pros on the left, cons on the right. */
 function AIReview({ m, opt, onOpen }: { m: Matcher; opt: TeamOption; onOpen: (roleId: string, c: Candidate) => void }) {
   const review = m.review;
@@ -573,6 +592,7 @@ function AIReview({ m, opt, onOpen }: { m: Matcher; opt: TeamOption; onOpen: (ro
       <div className="flex flex-wrap items-center gap-2.5">
         <span className="inline-flex items-center gap-1.5 text-[13px] font-bold"><Sparkles size={14} style={{ color: "var(--v-accent)" }} /> AI review</span>
         <Chip tone={meta.tone}>{meta.tone === "good" ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />} {meta.label}</Chip>
+        {m.meta?.voice && <span className="ml-auto"><ListenButton text={spokenReview(meta.label, review.pros ?? [], review.cons ?? [])} /></span>}
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {column("pro", review.pros ?? [])}
@@ -1007,6 +1027,7 @@ function AddRoleDrawer({ m, onClose }: { m: Matcher; onClose: () => void }) {
     <Drawer title="Add a role" sub="Describe it in your own words. The people already chosen stay." onClose={onClose}>
       <form onSubmit={submit} className="space-y-3 p-5">
         <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder="e.g. A QA automation engineer with Selenium, available now" className="w-full resize-none rounded-md border bg-white px-4 py-3 text-[16px] outline-none focus:border-[var(--v-accent)] sm:text-[15px]" style={line} />
+        {m.meta?.voice && canRecord() && <MicButton onText={(t) => setText((v) => (v.trim() ? `${v.trimEnd()} ${t}` : t))} />}
         <Btn variant="primary" type="submit" disabled={text.trim().length < 4 || m.addingRole} className="w-full">
           {m.addingRole ? <><Spinner /> Adding…</> : <>Add to team <ArrowRight size={15} /></>}
         </Btn>

@@ -8,9 +8,9 @@ import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -36,6 +36,7 @@ from .schemas import (
 )
 from .scoring import RoleScores, Scorer
 from .team import build_team, complement
+from .voice import MAX_AUDIO_BYTES, VoiceClient, VoiceError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("matcher")
@@ -50,6 +51,7 @@ class App:
     llm: LLMClient
     interpreter: Interpreter
     explainer: Explainer
+    voice: VoiceClient
     role_cache: OrderedDict[str, RoleScores]
 
 
@@ -65,12 +67,20 @@ async def lifespan(_: FastAPI):
     state.llm = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_concurrency)
     state.interpreter = Interpreter(state.store, state.llm, settings.model_interpret)
     state.explainer = Explainer(state.store, state.llm, settings.model_explain, settings.model_team)
+    state.voice = VoiceClient(
+        settings.elevenlabs_api_key, settings.elevenlabs_base_url,
+        stt_model=settings.voice_stt_model, tts_model=settings.voice_tts_model, voice_id=settings.voice_id,
+        speed=settings.voice_speed,
+    )
     state.role_cache = OrderedDict()
     log.info("AI %s (interpret=%s, explain=%s, team=%s), %d saved projects",
              "enabled" if state.llm.available else "DISABLED", settings.model_interpret,
              settings.model_explain, settings.model_team, state.projects.count())
+    log.info("Voice (ElevenLabs) %s (stt=%s, tts=%s)", "enabled" if state.voice.available else "DISABLED",
+             settings.voice_stt_model, settings.voice_tts_model)
     yield
     await state.llm.close()
+    await state.voice.close()
     state.projects.close()
 
 
@@ -264,7 +274,7 @@ def run_search(
 # -------------------------------------------------------------------- API
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "profiles": state.store.n, "ai": state.llm.available}
+    return {"ok": True, "profiles": state.store.n, "ai": state.llm.available, "voice": state.voice.available}
 
 
 @app.get("/api/meta")
@@ -275,6 +285,7 @@ async def meta():
         "available_now": int((s.avail == 0).sum()),
         "available_soon": int((s.avail == 1).sum()),
         "ai": state.llm.available,
+        "voice": state.voice.available,
         "projects_count": state.projects.count(),
         "models": {"interpret": settings.model_interpret, "explain": settings.model_explain, "team": settings.model_team},
         "examples": EXAMPLES,
@@ -372,6 +383,35 @@ async def team_review(payload: dict):
     if not isinstance(team, list) or not team or len(team) > 20:
         raise HTTPException(400, "Expected a non-empty team list")
     return await state.explainer.team_review(team)
+
+
+@app.post("/api/transcribe")
+async def transcribe(request: Request):
+    """Raw recorded audio in the body (Content-Type = the recorder's MIME type) -> brief text."""
+    chunks, size = [], 0
+    async for chunk in request.stream():  # stop reading early instead of buffering a huge upload
+        size += len(chunk)
+        if size > MAX_AUDIO_BYTES:
+            raise HTTPException(413, "The recording is too long. Keep it under a few minutes.")
+        chunks.append(chunk)
+    audio = b"".join(chunks)
+    try:
+        return await state.voice.transcribe(audio, request.headers.get("content-type", ""))
+    except VoiceError as e:
+        raise HTTPException(e.status, str(e)) from e
+
+
+@app.post("/api/speak")
+async def speak(payload: dict):
+    """{text} -> MP3 read out in the configured ElevenLabs voice."""
+    text = payload.get("text")
+    if not isinstance(text, str):
+        raise HTTPException(400, "Expected {text}")
+    try:
+        audio = await state.voice.speak(text)
+    except VoiceError as e:
+        raise HTTPException(e.status, str(e)) from e
+    return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.exception_handler(Exception)

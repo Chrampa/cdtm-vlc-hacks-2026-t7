@@ -40,6 +40,30 @@ async function call<T>(
   return res.json() as Promise<T>;
 }
 
+async function errorText(res: Response): Promise<string> {
+  try {
+    const j = await res.json();
+    if (typeof j.detail === "string") return j.detail;
+  } catch {
+    /* keep default */
+  }
+  return `Request failed (${res.status})`;
+}
+
+/** Recorded audio -> text (ElevenLabs speech-to-text, via our server). */
+async function transcribe(audio: Blob): Promise<{ text: string; language?: string }> {
+  const res = await fetch("/api/transcribe", { method: "POST", headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
+  if (!res.ok) throw new Error(await errorText(res));
+  return res.json();
+}
+
+/** Text -> MP3 (ElevenLabs text-to-speech, via our server). */
+async function speak(text: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }), signal });
+  if (!res.ok) throw new Error(await errorText(res));
+  return res.blob();
+}
+
 export interface SearchOptions {
   team_shape?: TeamShape | null;
   locks?: Record<string, string>;
@@ -54,6 +78,8 @@ export const api = {
   explain: (role: RoleSpec, employee_id: string) => call<Explanation>("/api/explain", { role, employee_id }),
   candidate: (role: RoleSpec, employee_id: string) => call<Candidate>("/api/candidate", { role, employee_id }),
   teamReview: (team: unknown[]) => call<TeamReview>("/api/team-review", { team }),
+  transcribe,
+  speak,
   projects: {
     list: () => call<Project[]>("/api/projects"),
     get: (id: string) => call<Project>(`/api/projects/${encodeURIComponent(id)}`),

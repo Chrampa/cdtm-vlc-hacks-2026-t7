@@ -53,6 +53,15 @@ Every AI call goes through any OpenAI-compatible endpoint (default Ironlane, key
 
 Mimo v2.6 Flash was tested and is 4–5× slower for the same output. If the AI is unreachable, a deterministic fallback parser takes over and warns the user.
 
+### Voice (ElevenLabs, optional)
+
+| Feature | Where | Model (env var) |
+|---|---|---|
+| **Speak the brief** instead of typing it, in any language (auto-detected) | Mic button on Home and in *Add a role* | `scribe_v3` (`ELEVENLABS_STT_MODEL`) |
+| **Listen to the team** in ~7 s: verdict, the top strength and the top risk | *Listen* in the AI review | `eleven_flash_v2_5` (`ELEVENLABS_TTS_MODEL`) at 1.15× (`ELEVENLABS_SPEED`), voice `ELEVENLABS_VOICE_ID` |
+
+The key comes from `ELEVENLABS_API_KEY` or `ELEVENLABS_API_KEY_FILE` and stays server-side; the browser talks only to `/api/transcribe` and `/api/speak`. Both endpoints cap input size (8 MB audio, 1,500 characters of text) and are rate-limited (20 calls/min each), and repeated read-outs come from a cache, so a public URL cannot burn credits. Without a key the voice buttons are hidden.
+
 ## Run it
 
 ```bash
@@ -74,6 +83,7 @@ Tests: `uv run pytest -v` runs **16 tests** on the real 190k dataset covering ha
 - `POST /api/interpret {brief}` → `BriefSpec` (roles + `team_needs`)
 - `POST /api/search {spec, limit, team_shape?, locks?, option?}` → ranked lists, funnel, keyword baseline, and 3 CP-SAT team alternatives with scorecards & swaps
 - `POST /api/explain {role, employee_id}` · `POST /api/candidate {role, employee_id}` · `POST /api/team-review {team}`
+- `POST /api/transcribe` (raw audio body) → `{text, language}` · `POST /api/speak {text}` → `audio/mpeg`
 - `GET /api/meta` · `GET /api/health`
 
 ## Docs

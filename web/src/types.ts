@@ -284,6 +284,8 @@ export interface Meta {
   available_now: number;
   available_soon: number;
   ai: boolean;
+  /** ElevenLabs is configured: spoken briefs and read-outs are available. */
+  voice?: boolean;
   projects_count?: number;
   models: Record<string, string>;
   examples: Example[];
