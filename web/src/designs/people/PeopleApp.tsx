@@ -11,7 +11,6 @@ import {
   CircleAlert,
   Clock,
   Copy,
-  FolderKanban,
   FolderPlus,
   Globe,
   Lock,
@@ -171,35 +170,16 @@ export default function PeopleApp({ m }: { m: Matcher }) {
 // ------------------------------------------------------------------- home
 function Home({ m }: { m: Matcher }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  const [mode, setMode] = useState<"new" | "existing">("new");
-  const [targetId, setTargetId] = useState<string>("");
   useEffect(() => {
-    if (mode === "new" && typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches) {
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches) {
       ref.current?.focus();
     }
-  }, [mode]);
-  useEffect(() => {
-    if (m.projects.length > 0 && !m.projects.some((p) => p.id === targetId)) {
-      setTargetId(m.projects[0].id);
-    }
-    if (m.projects.length === 0 && mode === "existing") {
-      setMode("new");
-    }
-  }, [m.projects, targetId, mode]);
+  }, []);
 
-  const targetProject = m.projects.find((p) => p.id === targetId) ?? m.projects[0] ?? null;
   const ready = m.brief.trim().length >= 10;
-  const addReady = m.brief.trim().length >= 4 && Boolean(targetProject) && !m.addingRole;
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === "existing" && targetProject) {
-      if (!addReady) return;
-      const text = m.brief;
-      m.setBrief("");
-      await m.addRoleFromBrief(text, targetProject);
-      return;
-    }
     if (ready) m.submit();
   };
 
@@ -207,124 +187,38 @@ function Home({ m }: { m: Matcher }) {
     <main className="mx-auto max-w-3xl px-4 pb-20 pt-5 sm:px-6 sm:pb-24 sm:pt-14 fade-in">
       <h1 className="v-display text-[30px] font-bold leading-[36px] tracking-tight sm:text-[40px] sm:leading-[48px]">Who do you need?</h1>
       <p className="mt-2.5 max-w-2xl text-[15px] leading-6 sm:mt-3 sm:text-[17px] sm:leading-7" style={ink2}>
-        Describe a new role or project team in your own words — or modify an existing saved project and its team.
+        Describe a role or project team in your own words — we’ll find the best people across the company.
       </p>
 
-      {m.projects.length > 0 && (
-        <div className="mt-5 grid w-full grid-cols-2 rounded-full border bg-white p-1 sm:mt-6 sm:inline-flex sm:w-auto" style={line}>
-          <button
-            type="button"
-            onClick={() => setMode("new")}
-            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-[13px] font-semibold transition-colors sm:px-4"
-            style={mode === "new" ? { background: "var(--v-accent)", color: "#fff" } : ink2}
-          >
-            <Plus size={14} className="shrink-0" />
-            <span className="sm:hidden">New project</span>
-            <span className="hidden sm:inline">New project &amp; team</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("existing")}
-            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-[13px] font-semibold transition-colors sm:px-4"
-            style={mode === "existing" ? { background: "var(--v-accent)", color: "#fff" } : ink2}
-          >
-            <FolderKanban size={14} className="shrink-0" />
-            <span className="sm:hidden">Existing ({m.projects.length})</span>
-            <span className="hidden sm:inline">Modify existing ({m.projects.length})</span>
-          </button>
-        </div>
-      )}
-
-      <form className="mt-5" onSubmit={onSubmit}>
+      <form className="mt-6" onSubmit={onSubmit}>
         <div className="rounded-[22px] border bg-white shadow-[0_1px_2px_rgba(31,35,40,.04),0_12px_32px_rgba(31,35,40,.06)] focus-within:border-[var(--v-accent)]" style={line}>
-          {mode === "existing" && targetProject && (
-            <div className="flex flex-col gap-2.5 border-b px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-5 sm:py-3.5" style={{ ...line, background: "var(--v-surface2)", borderRadius: "21px 21px 0 0" }}>
-              <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                <Briefcase size={15} style={{ color: "var(--v-accent)" }} className="shrink-0" />
-                <select
-                  aria-label="Choose existing project"
-                  value={targetProject.id}
-                  onChange={(e) => setTargetId(e.target.value)}
-                  className="min-w-0 flex-1 rounded-xl border bg-white px-3 py-2 text-[16px] font-bold outline-none sm:py-1.5 sm:text-[14px]"
-                  style={line}
-                >
-                  {m.projects.map((p) => {
-                    const total = p.stats?.slots_total ?? p.spec.roles.reduce((a, r) => a + r.count, 0);
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {p.title}{p.client ? ` (${p.client})` : ""} — {p.members.length}/{total} filled
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:items-center">
-                <button
-                  type="button"
-                  onClick={() => m.openProject(targetProject.id)}
-                  className="inline-flex items-center justify-center rounded-full border bg-white px-3.5 py-2 text-[13px] font-semibold sm:py-1.5 sm:text-[12px]"
-                  style={{ ...line, color: "var(--v-ink)" }}
-                >
-                  View details
-                </button>
-                <button
-                  type="button"
-                  onClick={() => m.modifyProject(targetProject)}
-                  className="inline-flex items-center justify-center gap-1 rounded-full px-3.5 py-2 text-[13px] font-semibold text-white sm:py-1.5 sm:text-[12px]"
-                  style={{ background: "var(--v-accent)" }}
-                >
-                  Open team <ArrowRight size={13} />
-                </button>
-              </div>
-            </div>
-          )}
-
           <textarea
             ref={ref}
             value={m.brief}
             onChange={(e) => m.setBrief(e.target.value)}
-            rows={mode === "existing" ? 3 : 4}
+            rows={4}
             maxLength={6000}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                if (mode === "existing" ? addReady : ready) {
-                  e.preventDefault();
-                  onSubmit(e);
-                }
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && ready) {
+                e.preventDefault();
+                m.submit();
               }
             }}
-            placeholder={
-              mode === "existing" && targetProject
-                ? `Or describe a new role to add to “${targetProject.title}” (e.g. a senior QA automation engineer with Selenium, available now)…`
-                : "For example: a senior data engineer with GCP experience for an insurance client, free within two months. Spanish and English."
-            }
+            placeholder="For example: a senior data engineer with GCP experience for an insurance client, free within two months. Spanish and English."
             className="block w-full resize-none rounded-[22px] bg-transparent px-4 py-4 text-[16px] leading-7 outline-none placeholder:text-[var(--v-ink2)]/60 sm:px-6 sm:py-5"
           />
           <div className="flex flex-col-reverse items-stretch gap-3 px-4 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <span className="px-1 text-center text-[12px] sm:pl-2 sm:text-left sm:text-[13px]" style={ink2}>
-              {mode === "existing" && targetProject
-                ? "Adds new role(s) while keeping existing team members locked"
-                : "Any language · one role or a whole team"}
+              Any language · one role or a whole team
             </span>
-            {mode === "existing" && targetProject ? (
-              <button
-                type="submit"
-                disabled={!addReady}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-[15px] font-semibold text-white transition-opacity disabled:opacity-40 sm:w-auto"
-                style={{ background: "var(--v-accent)" }}
-              >
-                {m.addingRole ? <><Spinner /> Adding…</> : <>Add role &amp; match <ArrowRight size={17} /></>}
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!ready}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-[15px] font-semibold text-white transition-opacity disabled:opacity-40 sm:w-auto"
-                style={{ background: "var(--v-accent)" }}
-              >
-                Find people <ArrowRight size={17} />
-              </button>
-            )}
+            <button
+              type="submit"
+              disabled={!ready}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-[15px] font-semibold text-white transition-opacity disabled:opacity-40 sm:w-auto"
+              style={{ background: "var(--v-accent)" }}
+            >
+              Find people <ArrowRight size={17} />
+            </button>
           </div>
         </div>
       </form>

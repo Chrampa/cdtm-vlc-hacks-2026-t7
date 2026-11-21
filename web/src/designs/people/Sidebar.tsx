@@ -4,7 +4,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
-  Search,
   Sparkles,
   Users,
   X,
@@ -141,14 +140,6 @@ export function Sidebar({
 
       {/* Main navigation */}
       <nav aria-label="Primary" className="mt-4 space-y-1 px-2.5">
-        <NavItem
-          icon={<Search size={17} />}
-          label="Find people"
-          active={m.view === "home"}
-          compact={isCompact}
-          onClick={act(m.goHome)}
-        />
-
         {hasResults && (
           <NavItem
             icon={m.result?.multi ? <Users size={17} /> : <Sparkles size={17} />}
