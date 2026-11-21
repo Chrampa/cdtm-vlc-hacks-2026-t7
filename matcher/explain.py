@@ -43,22 +43,43 @@ Hard rules: use ONLY the evidence lines. Any number you write must appear in the
 TEAM_SCHEMA = {
     "type": "object",
     "properties": {
-        "summary": {"type": "string"},
-        "risks": {"type": "array", "items": {"type": "string"}},
-        "suggestions": {"type": "array", "items": {"type": "string"}},
+        "verdict": {"type": "string", "enum": ["strong", "solid", "mixed", "weak"]},
+        "headline": {"type": "string"},
+        "members": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "strength": {"type": "string"}, "concern": {"type": "string"}},
+                "required": ["name", "strength", "concern"],
+                "additionalProperties": False,
+            },
+        },
+        "watch": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "text": {"type": "string"}},
+                "required": ["name", "text"],
+                "additionalProperties": False,
+            },
+        },
+        "actions": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["summary", "risks", "suggestions"],
+    "required": ["verdict", "headline", "members", "watch", "actions"],
     "additionalProperties": False,
 }
-
-TEAM_SYSTEM = """You review a proposed project team for an HR staffing manager.
+TEAM_SYSTEM = """You review a proposed project team for a busy HR staffing manager who only scans. Be extremely brief.
 You get each position, the person proposed for it, their fit score, the must-haves they cover and the gaps. The assignment was computed by an optimiser that never repeats a person and respects availability.
 
-Write:
-- summary: 2-3 plain-English sentences on how well the team covers the brief as a whole (balance, shared strengths, coverage).
-- risks: up to 3 team-level risks (uncovered must-haves, availability, seniority balance), each naming the position.
-- suggestions: up to 2 concrete actions (e.g. pair someone with a named alternate, verify something in interview).
-Use only the information given; refer to people by the names given; do not invent facts."""
+Return:
+- verdict: "strong" (covers the brief well), "solid" (good with minor gaps), "mixed" (clear weak spots), or "weak".
+- headline: ONE line, max 10 words, no names, e.g. "Strong mainframe core; data role is the weak spot".
+- members: one entry per proposed person (use the exact name given):
+  strength = their key contribution in 2-3 words (e.g. "COBOL veteran", "Azure landing zones");
+  concern = their main gap or risk in 2-4 words, or "" if none (e.g. "SQL not proven", "Starts in 3 months").
+- watch: up to 3 team-level risks, each {name: the person concerned or "" for the whole team, text: max 6 words}.
+- actions: up to 2 next steps, each max 8 words, imperative (e.g. "Check Mirta's SQL in the interview").
+Use only the information given; do not invent facts; no percentages."""
 
 # Catalog skills that are also everyday words; mentioning them is not a skill claim.
 _GENERIC = {
@@ -184,23 +205,48 @@ class Explainer:
                 names.add(t["person"]["name"])
                 tr = f" [{t['team_role']}]" if t.get("team_role") else ""
                 mn = f" Mentored by {t['mentor']}." if t.get("mentor") else ""
+                av = str(t["person"].get("availability", ""))
+                av = ("available now" if "now" in av.lower() or "banca" in av.lower()
+                      else "free within 3 months, finishing another project" if "roll" in av.lower() or "3" in av
+                      else "currently on another project")
                 lines.append(
-                    f"- {t['role']}{tr}: {t['person']['name']} ({t['person']['role']}, {t['person']['seniority']}, {t['person']['availability']}), fit {t['person']['fit']}%. "
+                    f"- {t['role']}{tr}: {t['person']['name']} ({t['person']['role']}, {t['person']['seniority']}, {av}), fit {t['person']['fit']}%. "
                     f"Covers: {', '.join(t['person'].get('covered', [])) or 'none'}. Gaps: {', '.join(t['person'].get('gaps', [])) or 'none'}.{mn}"
                     + (f" Possible pairing: {t['complement']['name']} covers {', '.join(t['complement']['covers'])}." if t.get("complement") else "")
                 )
             else:
                 lines.append(f"- {t['role']}: nobody eligible.")
         try:
-            out, meta = await self.llm.json(self.team_model, TEAM_SYSTEM, "TEAM:\n" + "\n".join(lines), TEAM_SCHEMA, "team_review", max_tokens=700, timeout=40)
+            out, meta = await self.llm.json(self.team_model, TEAM_SYSTEM, "TEAM:\n" + "\n".join(lines), TEAM_SCHEMA, "team_review", max_tokens=600, timeout=40)
         except LLMError as e:
             log.warning("team review failed: %s", e)
             return {"ok": False, "error": "The AI service did not answer."}
+        def clip(text: str, n: int) -> str:
+            words = (text or "").strip().rstrip(".").split()
+            return " ".join(words[:n]) + ("…" if len(words) > n else "")
+
+        verdict = out.get("verdict") if out.get("verdict") in ("strong", "solid", "mixed", "weak") else "mixed"
+        headline = clip(out.get("headline", ""), 12)
+        members = [
+            {"name": m["name"], "strength": clip(m.get("strength", ""), 4), "concern": clip(m.get("concern", ""), 5)}
+            for m in (out.get("members") or []) if m.get("name") in names
+        ]
+        watch = [
+            {"name": w.get("name") if w.get("name") in names else "", "text": clip(w.get("text", ""), 8)}
+            for w in (out.get("watch") or []) if (w.get("text") or "").strip()
+        ][:3]
+        actions = [clip(a, 10) for a in (out.get("actions") or []) if a.strip()][:2]
         return {
             "ok": True,
-            "summary": out.get("summary", "").strip(),
-            "risks": [r for r in (out.get("risks") or [])][:3],
-            "suggestions": [s for s in (out.get("suggestions") or [])][:2],
+            "verdict": verdict,
+            "headline": headline,
+            "members": members,
+            "watch": watch,
+            "actions": actions,
+            # Plain-text fields kept for older views.
+            "summary": headline,
+            "risks": [f"{w['name']}: {w['text']}" if w["name"] else w["text"] for w in watch],
+            "suggestions": actions,
             "model": meta["model"],
             "seconds": meta["seconds"],
         }

@@ -10,7 +10,6 @@ import type {
   ProjectMember,
   ProjectStats,
   ProjectStatus,
-  ProjectUpdate,
   RoleSpec,
   SearchResponse,
   TeamNeed,
@@ -21,7 +20,7 @@ import type {
 } from "../types";
 
 export type Phase = "idle" | "interpreting" | "searching" | "ready" | "error";
-export type View = "home" | "results" | "projects" | "project";
+export type View = "home" | "results" | "projects";
 
 function hash(s: string): string {
   let h = 5381;
@@ -158,7 +157,7 @@ function buildSnapshot(
   };
 }
 
-function parseHash(): { view: View; projectId: string | null } {
+function parseHash(): { view: View | "project"; projectId: string | null } {
   const h = location.hash;
   if (h === "#projects") return { view: "projects", projectId: null };
   if (h.startsWith("#project/")) {
@@ -173,7 +172,7 @@ function parseHash(): { view: View; projectId: string | null } {
 export function useMatcher() {
   const initial = useMemo(parseHash, []);
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [view, setView] = useState<View>(initial.view === "results" ? "home" : initial.view);
+  const [view, setView] = useState<View>(initial.view === "projects" ? "projects" : "home");
   const [brief, setBrief] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -187,19 +186,45 @@ export function useMatcher() {
   const [locks, setLocks] = useState<Record<string, string>>({});
   const [explanations, setExplanations] = useState<Record<string, Explanation | "loading">>({});
   const [review, setReview] = useState<TeamReview | "loading" | undefined>(undefined);
+  // Changes every time a new search or project is opened (UI resets its local state on it).
+  const [session, setSession] = useState(0);
 
-  // Saved projects state
+  // Saved projects state (every search is saved automatically as a draft)
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(initial.projectId);
-  const [dirty, setDirty] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [savingProject, setSavingProject] = useState(false);
   const [addingRole, setAddingRole] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const searchAbort = useRef<AbortController | null>(null);
   const runId = useRef(0);
+  const sessionRef = useRef(0);
+  const createdForSession = useRef(-1);
+  const pendingOpen = useRef<string | null>(initial.view === "project" ? initial.projectId : null);
   const toastTimer = useRef<number | null>(null);
+
+  // Revision counters: dirty = there are changes the server has not stored yet.
+  const revRef = useRef(0);
+  const savedRevRef = useRef(0);
+  const [revTick, setRevTick] = useState(0);
+  const markDirty = useCallback(() => {
+    revRef.current += 1;
+    setRevTick((t) => t + 1);
+  }, []);
+  const markClean = useCallback((at?: number) => {
+    savedRevRef.current = at ?? revRef.current;
+    setRevTick((t) => t + 1);
+  }, []);
+  const dirty = revRef.current !== savedRevRef.current;
+
+  const newSession = useCallback(() => {
+    sessionRef.current += 1;
+    setSession(sessionRef.current);
+    revRef.current = 0;
+    savedRevRef.current = 0;
+    setRevTick((t) => t + 1);
+  }, []);
 
   const flash = useCallback((msg: string) => {
     setToast(msg);
@@ -222,22 +247,6 @@ export function useMatcher() {
     api.meta().then(setMeta).catch(() => setMeta(null));
     refreshProjects();
   }, [refreshProjects]);
-
-  useEffect(() => {
-    const onPop = () => {
-      const parsed = parseHash();
-      if (parsed.view === "results") {
-        setView(result ? "results" : "home");
-      } else if (parsed.view === "project" && parsed.projectId) {
-        setActiveProjectId(parsed.projectId);
-        setView("project");
-      } else {
-        setView(parsed.view);
-      }
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [result]);
 
   const activeProject = useMemo(
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
@@ -286,21 +295,17 @@ export function useMatcher() {
     [roleById, explanationForRole],
   );
 
-  const candidateForRole = useCallback(async (role: RoleSpec, employeeId: string): Promise<Candidate | null> => {
-    try {
-      return await api.candidate(role, employeeId);
-    } catch {
-      return null;
-    }
-  }, []);
-
   const candidate = useCallback(
     async (roleId: string, employeeId: string): Promise<Candidate | null> => {
       const r = roleById[roleId];
       if (!r) return null;
-      return candidateForRole(r, employeeId);
+      try {
+        return await api.candidate(r, employeeId);
+      } catch {
+        return null;
+      }
     },
-    [roleById, candidateForRole],
+    [roleById],
   );
 
   const runSearch = useCallback(
@@ -350,13 +355,14 @@ export function useMatcher() {
       if (b.length < 10) return;
       if (text !== undefined) setBrief(text);
       const id = ++runId.current;
+      newSession();
       setActiveProjectId(null);
-      setDirty(false);
       setView("results");
       if (location.hash !== "#results") history.pushState(null, "", location.pathname + "#results");
       setPhase("interpreting");
       setError(null);
       setResult(null);
+      setSpec(null);
       setTeamShape(null);
       setLocks({});
       setTeamOptionState("best_fit");
@@ -373,7 +379,7 @@ export function useMatcher() {
         setPhase("error");
       }
     },
-    [brief, runSearch],
+    [brief, runSearch, newSession],
   );
 
   const editRole = useCallback(
@@ -381,10 +387,10 @@ export function useMatcher() {
       if (!spec) return;
       const next = { ...spec, roles: spec.roles.map((r) => (r.id === role.id ? role : r)) };
       setSpec(next);
-      setDirty(true);
+      markDirty();
       runSearch(next, false);
     },
-    [spec, runSearch],
+    [spec, runSearch, markDirty],
   );
 
   const setRoleCount = useCallback(
@@ -401,10 +407,10 @@ export function useMatcher() {
       }
       setSpec(nextSpec);
       setLocks(nextLocks);
-      setDirty(true);
+      markDirty();
       runSearch(nextSpec, false, { locks: nextLocks });
     },
-    [spec, locks, runSearch],
+    [spec, locks, runSearch, markDirty],
   );
 
   const removeRole = useCallback(
@@ -418,12 +424,12 @@ export function useMatcher() {
       }
       setSpec(nextSpec);
       setLocks(nextLocks);
-      setDirty(true);
+      markDirty();
       const nextMulti = nextRoles.length > 1 || nextRoles.some((r) => r.count > 1);
       const focusTab = tab === roleId ? (nextMulti ? "team" : nextRoles[0].id) : undefined;
       runSearch(nextSpec, false, { locks: nextLocks, focusTab });
     },
-    [spec, locks, tab, runSearch],
+    [spec, locks, tab, runSearch, markDirty],
   );
 
   const resetRole = useCallback(
@@ -442,61 +448,37 @@ export function useMatcher() {
         patch === null ? cur.filter((n) => n.id !== needId) : cur.map((n) => (n.id === needId ? { ...n, ...patch } : n));
       const next = { ...spec, team_needs: nextNeeds };
       setSpec(next);
-      setDirty(true);
+      markDirty();
       runSearch(next, false);
     },
-    [spec, runSearch],
+    [spec, runSearch, markDirty],
   );
 
-  const setTeamOption = useCallback((opt: TeamOptionId) => {
-    setTeamOptionState(opt);
-    setReview(undefined);
-    setDirty(true);
-  }, []);
+  const setTeamOption = useCallback(
+    (opt: TeamOptionId) => {
+      setTeamOptionState(opt);
+      setReview(undefined);
+      markDirty();
+    },
+    [markDirty],
+  );
 
   const updateTeamShape = useCallback(
     (shape: TeamShape) => {
       setTeamShape(shape);
-      setDirty(true);
+      markDirty();
       if (spec) runSearch(spec, false, { shape });
     },
-    [spec, runSearch],
+    [spec, runSearch, markDirty],
   );
 
   const resetTeamShape = useCallback(() => {
     setTeamShape(null);
-    setDirty(true);
+    markDirty();
     if (spec) runSearch(spec, false, { shape: null });
-  }, [spec, runSearch]);
+  }, [spec, runSearch, markDirty]);
 
-  const toggleLock = useCallback(
-    (slotId: string, employeeId: string) => {
-      if (!spec) return;
-      const next = { ...locks };
-      if (next[slotId] === employeeId) delete next[slotId];
-      else next[slotId] = employeeId;
-      setLocks(next);
-      setDirty(true);
-      runSearch(spec, false, { locks: next });
-    },
-    [spec, locks, runSearch],
-  );
-
-  const swapMember = useCallback(
-    (slotId: string, employeeId: string) => {
-      if (!spec) return;
-      const next: Record<string, string> = {};
-      for (const [k, v] of Object.entries(locks)) {
-        if (v !== employeeId) next[k] = v;
-      }
-      next[slotId] = employeeId;
-      setLocks(next);
-      setDirty(true);
-      runSearch(spec, false, { locks: next });
-    },
-    [spec, locks, runSearch],
-  );
-
+  /** Put a person in a seat. The choice is kept (pinned) when the rest of the team is re-balanced. */
   const assignCandidate = useCallback(
     (slotId: string, employeeId: string) => {
       if (!spec) return;
@@ -506,12 +488,10 @@ export function useMatcher() {
       }
       next[slotId] = employeeId;
       setLocks(next);
-      setDirty(true);
-      if (result?.multi) {
-        runSearch(spec, false, { locks: next });
-      }
+      markDirty();
+      if (result?.multi) runSearch(spec, false, { locks: next });
     },
-    [spec, locks, result, runSearch],
+    [spec, locks, result, runSearch, markDirty],
   );
 
   const unassignSlot = useCallback(
@@ -520,24 +500,28 @@ export function useMatcher() {
       const next = { ...locks };
       delete next[slotId];
       setLocks(next);
-      setDirty(true);
-      if (result?.multi) {
-        runSearch(spec, false, { locks: next });
-      }
+      markDirty();
+      if (result?.multi) runSearch(spec, false, { locks: next });
     },
-    [spec, locks, result, runSearch],
+    [spec, locks, result, runSearch, markDirty],
+  );
+
+  /** Legacy pin toggle (kept for the unrouted /map design). */
+  const toggleLock = useCallback(
+    (slotId: string, employeeId: string) => (locks[slotId] === employeeId ? unassignSlot(slotId) : assignCandidate(slotId, employeeId)),
+    [locks, unassignSlot, assignCandidate],
   );
 
   const clearLocks = useCallback(() => {
     if (!spec || Object.keys(locks).length === 0) return;
     setLocks({});
-    setDirty(true);
+    markDirty();
     runSearch(spec, false, { locks: {} });
-  }, [spec, locks, runSearch]);
+  }, [spec, locks, runSearch, markDirty]);
 
   // --------------------------------------------------- project actions
   const currentSnapshot = useCallback(
-    (fallbackSingle = true) =>
+    (fallbackSingle = false) =>
       buildSnapshot(spec, result, activeTeamOption, locks, fallbackSingle, activeProject?.members ?? []),
     [spec, result, activeTeamOption, locks, activeProject],
   );
@@ -548,18 +532,24 @@ export function useMatcher() {
   }, []);
 
   const goResults = useCallback(() => {
-    if (!spec) return;
+    if (!spec && phase !== "interpreting" && phase !== "searching") return;
     setView("results");
-    if (location.hash !== "#results") history.pushState(null, "", location.pathname + "#results");
-  }, [spec]);
+    const target = activeProjectId ? `#project/${encodeURIComponent(activeProjectId)}` : "#results";
+    if (location.hash !== target) history.pushState(null, "", location.pathname + target);
+  }, [spec, phase, activeProjectId]);
 
   const startNewSearch = useCallback(() => {
+    ++runId.current;
+    searchAbort.current?.abort();
+    newSession();
     setActiveProjectId(null);
     setBrief("");
-    setDirty(false);
+    setSpec(null);
+    setResult(null);
+    setPhase("idle");
     setView("home");
     if (location.hash) history.pushState(null, "", location.pathname);
-  }, []);
+  }, [newSession]);
 
   const goProjects = useCallback(() => {
     setView("projects");
@@ -567,19 +557,11 @@ export function useMatcher() {
     refreshProjects();
   }, [refreshProjects]);
 
-  const openProject = useCallback((projectId: string) => {
-    setActiveProjectId(projectId);
-    setView("project");
-    const targetHash = `#project/${encodeURIComponent(projectId)}`;
-    if (location.hash !== targetHash) history.pushState(null, "", location.pathname + targetHash);
-  }, []);
-
+  /** Open a saved project straight into its live team screen. */
   const modifyProject = useCallback(
-    async (
-      project: Project,
-      opts?: { unlockSlotId?: string; focusTab?: string; clearAllLocks?: boolean },
-    ) => {
+    async (project: Project, opts?: { focusTab?: string; push?: boolean }) => {
       ++runId.current;
+      newSession();
       setActiveProjectId(project.id);
       setBrief(project.brief);
       setSpec(project.spec);
@@ -589,20 +571,15 @@ export function useMatcher() {
       setError(null);
       setResult(null);
 
-      const nextLocks: Record<string, string> = {};
-      if (!opts?.clearAllLocks) {
-        Object.assign(nextLocks, project.locks);
-        for (const mem of project.members) {
-          nextLocks[mem.slot_id] = mem.employee_id;
-        }
-        if (opts?.unlockSlotId) {
-          delete nextLocks[opts.unlockSlotId];
-        }
-      }
+      const nextLocks: Record<string, string> = { ...project.locks };
+      for (const mem of project.members) nextLocks[mem.slot_id] = mem.employee_id;
       setLocks(nextLocks);
-      setDirty(Boolean(opts?.unlockSlotId || opts?.clearAllLocks));
       setView("results");
-      if (location.hash !== "#results") history.pushState(null, "", location.pathname + "#results");
+      const target = `#project/${encodeURIComponent(project.id)}`;
+      if (location.hash !== target) {
+        if (opts?.push === false) history.replaceState(null, "", location.pathname + target);
+        else history.pushState(null, "", location.pathname + target);
+      }
       setPhase("searching");
 
       await runSearch(project.spec, true, {
@@ -612,61 +589,106 @@ export function useMatcher() {
         focusTab: opts?.focusTab,
       });
     },
-    [runSearch],
+    [runSearch, newSession],
   );
 
-  const saveAsNewProject = useCallback(
-    async (input: {
-      title: string;
-      client: string;
-      status: ProjectStatus;
-      notes: string;
-      includeTopIfUnselected?: boolean;
-    }): Promise<Project | null> => {
-      if (!spec) return null;
-      setSavingProject(true);
-      try {
-        const snap = currentSnapshot(input.includeTopIfUnselected ?? true);
-        const created = await api.projects.create({
-          title: input.title.trim() || spec.title,
-          client: input.client.trim(),
-          status: input.status,
-          notes: input.notes,
-          brief,
-          spec: { ...spec, title: input.title.trim() || spec.title },
-          team_shape: teamShape,
-          team_option: teamOption,
-          locks: snap.locks,
-          members: snap.members,
-          stats: snap.stats,
-        });
-        setProjects((prev) => [created, ...prev.filter((p) => p.id !== created.id)]);
-        setActiveProjectId(created.id);
-        setSpec(created.spec);
-        setDirty(false);
-        flash(`Saved "${created.title}"`);
-        return created;
-      } catch (e) {
-        flash((e as Error).message || "Could not save project");
-        return null;
-      } finally {
-        setSavingProject(false);
+  const openProject = useCallback(
+    (projectId: string) => {
+      const p = projects.find((x) => x.id === projectId);
+      if (p) {
+        if (p.id === activeProjectId && spec) goResults();
+        else modifyProject(p);
+      } else {
+        pendingOpen.current = projectId;
+        refreshProjects();
       }
     },
-    [spec, brief, teamShape, teamOption, currentSnapshot, flash],
+    [projects, activeProjectId, spec, goResults, modifyProject, refreshProjects],
   );
 
+  // Deep link (#project/<id>) once the project list has loaded.
+  useEffect(() => {
+    if (projectsLoading || !pendingOpen.current) return;
+    const id = pendingOpen.current;
+    pendingOpen.current = null;
+    const p = projects.find((x) => x.id === id);
+    if (p) modifyProject(p, { push: false });
+    else {
+      flash("That project no longer exists");
+      setView("home");
+      history.replaceState(null, "", location.pathname);
+    }
+  }, [projectsLoading, projects, modifyProject, flash]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const parsed = parseHash();
+      if (parsed.view === "project" && parsed.projectId) {
+        if (parsed.projectId === activeProjectId && spec) setView("results");
+        else {
+          const p = projects.find((x) => x.id === parsed.projectId);
+          if (p) modifyProject(p, { push: false });
+          else setView("home");
+        }
+      } else if (parsed.view === "results") {
+        setView(spec ? "results" : "home");
+      } else {
+        setView(parsed.view === "projects" ? "projects" : "home");
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [activeProjectId, spec, projects, modifyProject]);
+
+  // Every finished search becomes a draft project automatically — nobody has to remember to save.
+  useEffect(() => {
+    if (phase !== "ready" || !spec || !result || activeProjectId || refreshing) return;
+    if (createdForSession.current === sessionRef.current) return;
+    createdForSession.current = sessionRef.current;
+    const mySession = sessionRef.current;
+    const at = revRef.current;
+    const snap = buildSnapshot(spec, result, activeTeamOption, locks, false, []);
+    setSavingProject(true);
+    api.projects
+      .create({
+        title: spec.title,
+        client: "",
+        status: "draft",
+        notes: "",
+        brief,
+        spec,
+        team_shape: teamShape,
+        team_option: teamOption,
+        locks: snap.locks,
+        members: snap.members,
+        stats: snap.stats,
+      })
+      .then((created) => {
+        setProjects((prev) => [created, ...prev.filter((p) => p.id !== created.id)]);
+        if (mySession !== sessionRef.current) return;
+        setActiveProjectId(created.id);
+        markClean(at);
+        if (location.hash === "#results") {
+          history.replaceState(null, "", `${location.pathname}#project/${encodeURIComponent(created.id)}`);
+        }
+      })
+      .catch((e) => flash((e as Error).message || "Could not save this search"))
+      .finally(() => setSavingProject(false));
+  }, [phase, spec, result, activeProjectId, refreshing, activeTeamOption, locks, brief, teamShape, teamOption, markClean, flash]);
+
   const saveCurrentProject = useCallback(
-    async (metaPatch?: Partial<Pick<Project, "title" | "client" | "status" | "notes">>): Promise<Project | null> => {
+    async (opts?: { status?: ProjectStatus; message?: string }): Promise<Project | null> => {
       if (!activeProjectId || !spec) return null;
+      const at = revRef.current;
       setSavingProject(true);
       try {
         const snap = currentSnapshot(false);
-        const nextSpec = metaPatch?.title ? { ...spec, title: metaPatch.title.trim() } : spec;
+        // A confirmed team that is changed again goes back to draft until it is confirmed again.
+        const status = opts?.status ?? (activeProject?.status === "staffed" ? "draft" : undefined);
         const updated = await api.projects.update(activeProjectId, {
-          ...metaPatch,
+          ...(status ? { status } : {}),
           brief,
-          spec: nextSpec,
+          spec,
           team_shape: teamShape,
           team_option: teamOption,
           locks: snap.locks,
@@ -674,9 +696,8 @@ export function useMatcher() {
           stats: snap.stats,
         });
         setProjects((prev) => [updated, ...prev.filter((p) => p.id !== updated.id)]);
-        setSpec(updated.spec);
-        setDirty(false);
-        flash(`Saved changes to "${updated.title}"`);
+        markClean(at);
+        if (opts?.message) flash(opts.message);
         return updated;
       } catch (e) {
         flash((e as Error).message || "Could not save changes");
@@ -685,28 +706,37 @@ export function useMatcher() {
         setSavingProject(false);
       }
     },
-    [activeProjectId, spec, brief, teamShape, teamOption, currentSnapshot, flash],
+    [activeProjectId, activeProject, spec, brief, teamShape, teamOption, currentSnapshot, markClean, flash],
   );
 
-  const updateProjectMeta = useCallback(
-    async (projectId: string, patch: ProjectUpdate, message = "Project updated"): Promise<Project | null> => {
-      setSavingProject(true);
+  // Autosave edits to the open project shortly after they settle.
+  const saveRef = useRef(saveCurrentProject);
+  saveRef.current = saveCurrentProject;
+  useEffect(() => {
+    if (!activeProjectId || !dirty || phase !== "ready" || refreshing) return;
+    const t = window.setTimeout(() => saveRef.current(), 600);
+    return () => window.clearTimeout(t);
+  }, [activeProjectId, dirty, revTick, phase, refreshing]);
+
+  const confirmTeam = useCallback(
+    () => saveCurrentProject({ status: "staffed", message: result?.multi ? "Team confirmed" : "Choice confirmed" }),
+    [saveCurrentProject, result],
+  );
+
+  const renameProject = useCallback(
+    async (title: string) => {
+      const t = title.trim();
+      if (!t || !activeProjectId || !spec) return;
+      const nextSpec = { ...spec, title: t };
+      setSpec(nextSpec);
       try {
-        const updated = await api.projects.update(projectId, patch);
+        const updated = await api.projects.update(activeProjectId, { title: t, spec: nextSpec });
         setProjects((prev) => [updated, ...prev.filter((p) => p.id !== updated.id)]);
-        if (activeProjectId === projectId && patch.spec) {
-          setSpec(updated.spec);
-        }
-        flash(message);
-        return updated;
       } catch (e) {
-        flash((e as Error).message || "Could not update project");
-        return null;
-      } finally {
-        setSavingProject(false);
+        flash((e as Error).message || "Could not rename");
       }
     },
-    [activeProjectId, flash],
+    [activeProjectId, spec, flash],
   );
 
   const deleteProject = useCallback(
@@ -715,193 +745,85 @@ export function useMatcher() {
         await api.projects.delete(projectId);
         setProjects((prev) => prev.filter((p) => p.id !== projectId));
         if (activeProjectId === projectId) {
-          setActiveProjectId(null);
-          if (view === "project") goProjects();
+          if (view === "results") startNewSearch();
+          else setActiveProjectId(null);
         }
         flash("Project deleted");
       } catch (e) {
         flash((e as Error).message || "Could not delete project");
       }
     },
-    [activeProjectId, view, goProjects, flash],
-  );
-
-  const addCurrentSearchToProject = useCallback(
-    async (targetProjectId: string, includeTopIfUnselected = true): Promise<Project | null> => {
-      if (!spec) return null;
-      const target = projects.find((p) => p.id === targetProjectId);
-      if (!target) return null;
-      setSavingProject(true);
-      try {
-        const snap = currentSnapshot(includeTopIfUnselected);
-        let rNum = nextRoleIndex(target.spec.roles);
-        const roleIdMap = new Map<string, string>();
-        const appendedRoles: RoleSpec[] = spec.roles.map((r) => {
-          const newId = `r${rNum++}`;
-          roleIdMap.set(r.id, newId);
-          return {
-            ...r,
-            id: newId,
-            requirements: r.requirements.map((q, qi) => ({ ...q, id: `${newId}q${qi + 1}` })),
-          };
-        });
-
-        let tnNum = nextNeedIndex(target.spec.team_needs ?? []);
-        const appendedNeeds: TeamNeed[] = (spec.team_needs ?? []).map((tn) => ({
-          ...tn,
-          id: `tn${tnNum++}`,
-        }));
-
-        const mergedLocks: Record<string, string> = { ...target.locks };
-        for (const mem of target.members) mergedLocks[mem.slot_id] = mem.employee_id;
-
-        const existingEmpIds = new Set(target.members.map((m) => m.employee_id));
-        const appendedMembers: ProjectMember[] = [];
-        for (const mem of snap.members) {
-          const newRoleId = roleIdMap.get(mem.role_id) ?? mem.role_id;
-          const idxPart = mem.slot_id.split("#")[1] ?? "0";
-          const newSlotId = `${newRoleId}#${idxPart}`;
-          if (!existingEmpIds.has(mem.employee_id)) {
-            appendedMembers.push({ ...mem, role_id: newRoleId, slot_id: newSlotId });
-            mergedLocks[newSlotId] = mem.employee_id;
-            existingEmpIds.add(mem.employee_id);
-          }
-        }
-
-        const mergedSpec: BriefSpec = {
-          ...target.spec,
-          roles: [...target.spec.roles, ...appendedRoles],
-          team_needs: [...(target.spec.team_needs ?? []), ...appendedNeeds],
-        };
-        const mergedBrief = brief.trim()
-          ? target.brief
-            ? `${target.brief}\n\n+ Added: ${brief.trim()}`
-            : brief.trim()
-          : target.brief;
-
-        const updated = await api.projects.update(target.id, {
-          brief: mergedBrief,
-          spec: mergedSpec,
-          locks: mergedLocks,
-          members: [...target.members, ...appendedMembers],
-          status: target.status === "archived" ? "active" : target.status,
-        });
-        setProjects((prev) => [updated, ...prev.filter((p) => p.id !== updated.id)]);
-        flash(`Added to "${updated.title}"`);
-        await modifyProject(updated, { focusTab: "team" });
-        return updated;
-      } catch (e) {
-        flash((e as Error).message || "Could not add to project");
-        return null;
-      } finally {
-        setSavingProject(false);
-      }
-    },
-    [spec, brief, projects, currentSnapshot, modifyProject, flash],
+    [activeProjectId, view, startNewSearch, flash],
   );
 
   const addRoleFromBrief = useCallback(
-    async (roleBrief: string, targetProject?: Project): Promise<boolean> => {
+    async (roleBrief: string): Promise<boolean> => {
       const text = roleBrief.trim();
-      if (text.length < 4) return false;
+      if (text.length < 4 || !spec) return false;
       setAddingRole(true);
       try {
         const it = await api.interpret(text);
-        const baseSpec = targetProject ? targetProject.spec : spec;
-        if (!baseSpec) return false;
-
-        let rNum = nextRoleIndex(baseSpec.roles);
+        let rNum = nextRoleIndex(spec.roles);
         const newRoles: RoleSpec[] = it.spec.roles.map((r) => {
           const newId = `r${rNum++}`;
-          return {
-            ...r,
-            id: newId,
-            requirements: r.requirements.map((q, qi) => ({ ...q, id: `${newId}q${qi + 1}` })),
-          };
+          return { ...r, id: newId, requirements: r.requirements.map((q, qi) => ({ ...q, id: `${newId}q${qi + 1}` })) };
         });
-        let tnNum = nextNeedIndex(baseSpec.team_needs ?? []);
+        let tnNum = nextNeedIndex(spec.team_needs ?? []);
         const newNeeds: TeamNeed[] = (it.spec.team_needs ?? []).map((tn) => ({ ...tn, id: `tn${tnNum++}` }));
-
         const mergedSpec: BriefSpec = {
-          ...baseSpec,
-          roles: [...baseSpec.roles, ...newRoles],
-          team_needs: [...(baseSpec.team_needs ?? []), ...newNeeds],
+          ...spec,
+          roles: [...spec.roles, ...newRoles],
+          team_needs: [...(spec.team_needs ?? []), ...newNeeds],
         };
-
-        if (targetProject) {
-          const mergedBrief = targetProject.brief ? `${targetProject.brief}\n\n+ ${text}` : text;
-          const updated = await api.projects.update(targetProject.id, {
-            brief: mergedBrief,
-            spec: mergedSpec,
-          });
-          setProjects((prev) => [updated, ...prev.filter((p) => p.id !== updated.id)]);
-          flash(`Added ${newRoles.map((r) => r.title).join(", ")}`);
-          await modifyProject(updated, { focusTab: "team" });
-          return true;
-        }
-
-        // Preserve currently displayed members as locks so existing team stays steady
+        // Keep the people already chosen so the existing team stays steady.
         const nextLocks: Record<string, string> = { ...locks };
         if (result?.multi && activeTeamOption) {
-          for (const m of activeTeamOption.members) {
-            if (m.candidate) nextLocks[m.slot_id] = m.candidate.employee_id;
-          }
+          for (const mm of activeTeamOption.members) if (mm.candidate) nextLocks[mm.slot_id] = mm.candidate.employee_id;
+        } else if (result && !result.multi && spec.roles[0]) {
+          const sid = `${spec.roles[0].id}#0`;
+          if (!nextLocks[sid] && result.roles[0]?.candidates[0]) nextLocks[sid] = result.roles[0].candidates[0].employee_id;
         }
         setSpec(mergedSpec);
         setLocks(nextLocks);
-        setDirty(true);
+        setBrief((b) => (b ? `${b}\n\n+ ${text}` : text));
+        markDirty();
         await runSearch(mergedSpec, false, { locks: nextLocks, focusTab: "team" });
         flash(`Added ${newRoles.map((r) => r.title).join(", ")}`);
         return true;
       } catch (e) {
-        flash((e as Error).message || "Could not interpret new role");
+        flash((e as Error).message || "Could not understand the new role");
         return false;
       } finally {
         setAddingRole(false);
       }
     },
-    [spec, locks, result, activeTeamOption, modifyProject, runSearch, flash],
+    [spec, locks, result, activeTeamOption, runSearch, markDirty, flash],
   );
 
   const loadReview = useCallback(() => {
     if (!result?.multi || review !== undefined) return;
     setReview("loading");
     const opt = activeTeamOption;
-    const team = opt
-      ? opt.members.map((m) =>
-          m.candidate
-            ? {
-                role: m.slot_label,
-                team_role: m.team_role,
-                mentor: m.mentor?.name,
-                person: {
-                  name: m.candidate.name,
-                  role: m.candidate.role,
-                  seniority: m.candidate.seniority,
-                  availability: m.candidate.availability,
-                  fit: m.candidate.fit,
-                  covered: m.candidate.requirements.filter((q) => q.importance === "must" && q.status === "covered").map((q) => q.label),
-                  gaps: m.candidate.requirements.filter((q) => q.importance === "must" && q.status !== "covered" && q.status !== "unknown").map((q) => q.label),
-                },
-              }
-            : { role: m.slot_label },
-        )
-      : result.roles.flatMap((r) => {
-          const prop = r.candidates.filter((c) => c.proposed);
-          if (!prop.length) return [{ role: r.title }];
-          return prop.map((c) => ({
-            role: r.title,
+    const team = (opt?.members ?? []).map((mm) =>
+      mm.candidate
+        ? {
+            role: mm.slot_label,
+            team_role: mm.team_role,
+            mentor: mm.mentor?.name,
             person: {
-              name: c.name,
-              role: c.role,
-              seniority: c.seniority,
-              availability: c.availability,
-              fit: c.fit,
-              covered: c.requirements.filter((q) => q.importance === "must" && q.status === "covered").map((q) => q.label),
-              gaps: c.requirements.filter((q) => q.importance === "must" && q.status !== "covered" && q.status !== "unknown").map((q) => q.label),
+              name: mm.candidate.name,
+              role: mm.candidate.role,
+              seniority: mm.candidate.seniority,
+              availability: mm.candidate.availability,
+              fit: mm.candidate.fit,
+              covered: mm.candidate.requirements.filter((q) => q.importance === "must" && q.status === "covered").map((q) => q.label),
+              gaps: mm.candidate.requirements
+                .filter((q) => q.importance === "must" && q.status !== "covered" && q.status !== "unknown")
+                .map((q) => q.label),
             },
-          }));
-        });
+          }
+        : { role: mm.slot_label },
+    );
     api.teamReview(team).then(setReview).catch(() => setReview({ ok: false, error: "The AI service did not answer." }));
   }, [result, review, activeTeamOption]);
 
@@ -921,6 +843,7 @@ export function useMatcher() {
     tab,
     setTab,
     review,
+    session,
     teamOption,
     setTeamOption,
     activeTeamOption,
@@ -928,9 +851,9 @@ export function useMatcher() {
     updateTeamShape,
     resetTeamShape,
     locks,
-    toggleLock,
-    swapMember,
     assignCandidate,
+    swapMember: assignCandidate,
+    toggleLock,
     unassignSlot,
     clearLocks,
     editTeamNeed,
@@ -942,16 +865,13 @@ export function useMatcher() {
     resetRole,
     originalRole,
     explain: explainById,
-    explainForRole,
     explanation,
-    explanationForRole,
     candidate,
-    candidateForRole,
     loadReview,
     goHome,
     goResults,
     startNewSearch,
-    // Projects & Teams
+    // Projects (saved automatically)
     projects,
     projectsLoading,
     activeProject,
@@ -960,15 +880,11 @@ export function useMatcher() {
     savingProject,
     addingRole,
     toast,
-    currentSnapshot,
     goProjects,
     openProject,
-    modifyProject,
-    saveAsNewProject,
-    saveCurrentProject,
-    updateProjectMeta,
+    confirmTeam,
+    renameProject,
     deleteProject,
-    addCurrentSearchToProject,
     addRoleFromBrief,
   };
 }

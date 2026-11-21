@@ -191,6 +191,19 @@ _EN = re.compile(r"\b(the|and|with|we|need|needs|experience|for|to|of|should|mus
 _ES = re.compile(r"\b(el|la|los|las|de|del|que|con|necesitamos|experiencia|para|y|equipo|años|nivel|debe)\b", re.I)
 
 
+def _clip_text(text: str, limit: int) -> str:
+    """Shorten text at a sentence (or word) boundary so summaries never stop mid-phrase."""
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    if end >= limit * 0.5:
+        return cut[: end + 1]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > 0 else cut).rstrip(" ,;:-") + "…"
+
+
 def _looks_english(text: str) -> bool:
     return len(_EN.findall(text)) >= len(_ES.findall(text))
 
@@ -611,7 +624,7 @@ class Interpreter:
             log.info("Dropped non-catalog skills: %s", sorted(dropped))
         return BriefSpec(
             title=(raw.get("title") or "Staffing brief").strip()[:80],
-            summary=(raw.get("summary") or "").strip()[:300],
+            summary=_clip_text(raw.get("summary") or "", 300),
             roles=roles,
             team_needs=team_needs,
         )
@@ -687,7 +700,7 @@ class Interpreter:
             q.id = f"r1q{i + 1}"
         return BriefSpec(
             title="Staffing brief",
-            summary=brief.strip()[:200],
+            summary=_clip_text(brief, 200),
             roles=[RoleSpec(id="r1", title=targets[0].name if targets else "Requested profile", seniority_min=seniority, seniority_mode=seniority_mode,
                             min_years=min_years, availability=availability, target_roles=targets, requirements=reqs[:12])],
         )

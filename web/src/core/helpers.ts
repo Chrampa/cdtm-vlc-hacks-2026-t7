@@ -100,3 +100,93 @@ export function hiddenReasons(c: Candidate): string[] {
 export const outside = (c: Candidate) => c.other_team || c.hidden_sector;
 
 export const teamLabel = (role: string) => role.replace(/\s*\(.*\)$/, "").replace(/ (Engineer|Developer|Consultant|Analyst|Specialist|Manager)$/, "");
+
+// ------------------------------------------------------------ plain-language helpers for HR
+export type Tone = "good" | "ok" | "warn" | "bad";
+
+/** A word an HR reader understands instead of a bare percentage. */
+export function fitWord(fit: number): { word: string; tone: Tone } {
+  if (fit >= 85) return { word: "Strong", tone: "good" };
+  if (fit >= 70) return { word: "Good", tone: "ok" };
+  if (fit >= 55) return { word: "Fair", tone: "warn" };
+  return { word: "Weak", tone: "bad" };
+}
+
+export const toneColor: Record<Tone, string> = {
+  good: "var(--v-good)",
+  ok: "var(--v-good)",
+  warn: "var(--v-warn)",
+  bad: "var(--v-bad)",
+};
+
+export function availText(code: number, short = false): string {
+  if (code === 0) return short ? "Free now" : "Available now";
+  if (code === 1) return short ? "Free < 3 mo" : "Free within 3 months";
+  return short ? "On a project" : "Currently on a project";
+}
+
+/** Must-haves the profile does not (fully) show. */
+export function mustGaps(c: Candidate): ReqResult[] {
+  return c.requirements.filter((r) => r.importance === "must" && (r.status === "missing" || r.status === "partial"));
+}
+
+/** Must-haves first, then fit, then people free sooner. */
+export function rankCandidates(list: Candidate[]): Candidate[] {
+  return [...list].sort(
+    (a, b) =>
+      b.must_covered / Math.max(1, b.must_total) - a.must_covered / Math.max(1, a.must_total) ||
+      b.fit - a.fit ||
+      a.availability_code - b.availability_code,
+  );
+}
+
+export const OPTION_NAME: Record<string, string> = {
+  best_fit: "Recommended",
+  ready_now: "Everyone free now",
+  leanest: "Fewer seniors",
+};
+
+const RULE_TEXT: Record<string, { breaks: string; fixes: string }> = {
+  anchor: { breaks: "No Lead left on the team", fixes: "Adds a Lead to the team" },
+  "senior cap": { breaks: "Too many seniors", fixes: "Better seniority balance" },
+  mid: { breaks: "No Mid-level left", fixes: "Adds a Mid-level" },
+  junior: { breaks: "No junior left", fixes: "Adds a mentored junior" },
+  language: { breaks: "No shared language", fixes: "Restores a shared language" },
+  timezone: { breaks: "Time zones too far apart", fixes: "Time zones closer together" },
+};
+
+/** Turn the solver's swap impact codes into short plain trade-offs. */
+export function plainImpacts(sw: { fit_delta: number; bench_delta: number; impact: string[] }): { good: boolean; text: string }[] {
+  const out: { good: boolean; text: string }[] = [];
+  if (sw.fit_delta > 0) out.push({ good: true, text: `Team match +${sw.fit_delta}%` });
+  if (sw.fit_delta < 0) out.push({ good: false, text: `Team match ${sw.fit_delta}%` });
+  if (sw.bench_delta > 0) out.push({ good: true, text: "Free now" });
+  if (sw.bench_delta < 0) out.push({ good: false, text: "Not free for up to 3 months" });
+  for (const imp of sw.impact) {
+    const br = imp.match(/^Breaks (.+)$/);
+    const fx = imp.match(/^Fixes (.+)$/);
+    const plus = imp.match(/^\+(\d+) (.+)$/);
+    const drops = imp.match(/^Drops (.+)$/);
+    if (br) out.push({ good: false, text: RULE_TEXT[br[1]]?.breaks ?? `Breaks ${br[1]}` });
+    else if (fx) out.push({ good: true, text: RULE_TEXT[fx[1]]?.fixes ?? `Fixes ${fx[1]}` });
+    else if (plus) out.push({ good: true, text: `Adds ${plus[2].toLowerCase()}` });
+    else if (drops) out.push({ good: false, text: `Loses ${drops[1].toLowerCase()}` });
+  }
+  return out;
+}
+
+export function copyText(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand("copy");
+  } finally {
+    document.body.removeChild(ta);
+  }
+  return Promise.resolve();
+}

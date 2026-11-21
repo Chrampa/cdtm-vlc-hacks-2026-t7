@@ -1,198 +1,156 @@
-import { Check, CircleAlert, Minus, X } from "lucide-react";
-import { useEffect } from "react";
-import { citedOnce, first, whyLine } from "../../core/helpers";
-import type { Candidate, Explanation } from "../../types";
-import { Availability, Avatar } from "./PeopleApp";
+import { Check, CircleAlert, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { first, shortLine } from "../../core/helpers";
+import type { Candidate } from "../../types";
+import { AvailDot, Avatar, Btn, FitMeter, GemTag, StatusIcon, ink2, ink3, line } from "./ui";
 
-const ink2 = { color: "var(--v-ink2)" };
-const line = { borderColor: "var(--v-line)" };
-
-function Status({ s }: { s: string }) {
-  const I = s === "covered" ? Check : s === "partial" ? Minus : X;
-  const bg = s === "covered" ? "var(--v-good-soft)" : s === "partial" ? "var(--v-warn-soft)" : "var(--v-bad-soft)";
-  const fg = s === "covered" ? "var(--v-good)" : s === "partial" ? "var(--v-warn)" : "var(--v-bad)";
-  return <span className="grid size-6 shrink-0 place-items-center rounded-full" style={{ background: bg, color: fg }}><I size={14} strokeWidth={3} /></span>;
+interface Row {
+  key: string;
+  label: string;
+  sub?: string;
+  same: boolean;
+  cell: (c: Candidate) => ReactNode;
 }
 
-export function Compare({ people, roleTitle, explanation, onClose, onOpen }: {
-  people: Candidate[]; roleTitle: string; explanation: (id: string) => Explanation | "loading" | undefined; onClose: () => void; onOpen: (c: Candidate) => void;
+export function Compare({ people, roleTitle, onClose, onOpen, action }: {
+  people: Candidate[];
+  roleTitle: string;
+  onClose: () => void;
+  onOpen: (c: Candidate) => void;
+  action?: (c: Candidate) => { label: string; done?: boolean; onClick?: () => void } | null;
 }) {
+  const [onlyDiff, setOnlyDiff] = useState(true);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
   }, [onClose]);
+
+  const allSame = <T,>(f: (c: Candidate) => T) => people.every((p) => f(p) === f(people[0]));
   const reqs = [...people[0].requirements].sort((a, b) => (a.importance === b.importance ? 0 : a.importance === "must" ? -1 : 1));
-  const cols = `minmax(170px, 220px) repeat(${people.length}, minmax(220px, 1fr))`;
   const best = Math.max(...people.map((p) => p.fit));
+
+  const rows: Row[] = [
+    { key: "level", label: "Level", same: allSame((c) => c.seniority), cell: (c) => <span className="text-[14px] font-semibold">{c.seniority}</span> },
+    { key: "years", label: "Experience", same: allSame((c) => c.years), cell: (c) => <span className="text-[14px] font-semibold">{c.years} years</span> },
+    { key: "avail", label: "Availability", same: allSame((c) => c.availability_code), cell: (c) => <AvailDot code={c.availability_code} /> },
+    { key: "loc", label: "Location", same: allSame((c) => c.location.split(",").pop()?.trim()), cell: (c) => <span className="text-[14px]">{c.location}</span> },
+    ...reqs.map((r) => ({
+      key: r.id,
+      label: r.label,
+      sub: r.importance === "must" ? "Must have" : "Nice to have",
+      same: allSame((c) => c.requirements.find((q) => q.id === r.id)?.status ?? "missing"),
+      cell: (c: Candidate) => {
+        const x = c.requirements.find((q) => q.id === r.id);
+        const s = x?.status ?? "missing";
+        return (
+          <span className="flex items-start gap-2">
+            <StatusIcon s={s} />
+            <span className="text-[13px] leading-5" style={ink2}>{s === "missing" ? "Not shown" : x?.lines[0] ? shortLine(x.lines[0]) : "—"}</span>
+          </span>
+        );
+      },
+    })),
+    {
+      key: "risks",
+      label: "What to check",
+      same: people.every((p) => p.risks.length === 0),
+      cell: (c) => (
+        <ul className="space-y-1 text-[13px] leading-5" style={{ color: c.risks.length ? "var(--v-warn)" : "var(--v-ink3)" }}>
+          {c.risks.length ? c.risks.map((r) => <li key={r.text} className="flex gap-1.5"><CircleAlert size={13} className="mt-0.5 shrink-0" />{r.text}</li>) : <li>Nothing stands out</li>}
+        </ul>
+      ),
+    },
+  ];
+  const visible = onlyDiff ? rows.filter((r) => !r.same) : rows;
+  const hiddenCount = rows.length - visible.length;
+  const cols = `minmax(140px, 190px) repeat(${people.length}, minmax(200px, 1fr))`;
+
+  const head = (c: Candidate) => {
+    const a = action?.(c);
+    return (
+      <div className="flex h-full flex-col rounded-[var(--v-radius)] border bg-white p-4" style={{ borderColor: c.fit === best ? "var(--v-good)" : "var(--v-line)" }}>
+        <button onClick={() => onOpen(c)} className="flex items-center gap-3 text-left">
+          <Avatar c={c} size={40} />
+          <div className="min-w-0">
+            <div className="truncate text-[15px] font-bold">{c.name}</div>
+            <div className="truncate text-[12px]" style={ink2}>{c.position}</div>
+          </div>
+        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-2"><FitMeter fit={c.fit} /><GemTag c={c} /></div>
+        {c.fit === best && <div className="mt-1 text-[12px] font-bold" style={{ color: "var(--v-good)" }}>Highest match</div>}
+        <div className="mt-auto pt-3">
+          {a && (a.done ? (
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-bold" style={{ color: "var(--v-good)" }}><Check size={15} strokeWidth={3} /> {a.label}</span>
+          ) : (
+            <Btn variant="primary" small onClick={() => { a.onClick?.(); onClose(); }}>{a.label}</Btn>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="v-people fixed inset-0 z-50 overflow-y-auto bg-black/30 p-0 sm:p-4 md:p-8" onClick={onClose}>
-      <div
-        className="fade-in mx-auto min-h-[100dvh] max-w-6xl overflow-hidden sm:min-h-0 sm:rounded-[24px]"
-        onClick={(e) => e.stopPropagation()}
-        style={{ background: "var(--v-bg)", color: "var(--v-ink)", fontFamily: "var(--v-body)" }}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-3.5 backdrop-blur sm:px-6 sm:py-4" style={{ ...line, background: "rgba(245,248,252,.95)" }}>
+      <div className="fade-in mx-auto min-h-[100dvh] max-w-6xl overflow-hidden sm:min-h-0 sm:rounded-[var(--v-radius)]" onClick={(e) => e.stopPropagation()} style={{ background: "var(--v-bg)", color: "var(--v-ink)", fontFamily: "var(--v-body)" }}>
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-3.5 sm:px-6" style={line}>
           <div className="min-w-0">
-            <div className="truncate text-[12px] sm:text-[13px]" style={ink2}>Side by side · {roleTitle}</div>
-            <h2 className="text-[19px] font-bold sm:text-[22px]">Who fits best?</h2>
+            <div className="truncate text-[12px]" style={ink2}>{roleTitle}</div>
+            <h2 className="text-[19px] font-bold sm:text-[21px]">Who fits best?</h2>
           </div>
-          <button onClick={onClose} className="shrink-0 rounded-full border bg-white px-4 py-2 text-[14px] font-semibold" style={{ ...line, color: "var(--v-accent)" }}>Close</button>
+          <div className="flex items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-semibold">
+              <input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} className="size-4 accent-[var(--v-accent)]" />
+              Only differences
+            </label>
+            <button onClick={onClose} aria-label="Close" className="grid size-9 place-items-center rounded-md border bg-white" style={{ ...line, ...ink2 }}><X size={17} /></button>
+          </div>
         </div>
 
-        {/* Mobile stacked comparison (zero horizontal scroll) */}
+        {/* Mobile: one card per row */}
         <div className="space-y-3 p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:hidden">
-          <div className="grid grid-cols-2 gap-2.5">
-            {people.map((c) => (
-              <button
-                key={c.employee_id}
-                onClick={() => onOpen(c)}
-                className="rounded-[16px] border bg-white p-3.5 text-left"
-                style={{ borderColor: c.fit === best ? "var(--v-accent)" : "var(--v-line)" }}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Avatar c={c} size={36} />
-                  <div className="min-w-0">
-                    <div className="truncate text-[14px] font-bold">{c.name}</div>
-                    <div className="truncate text-[12px]" style={ink2}>{c.seniority}</div>
-                  </div>
-                </div>
-                <div className="mt-2.5 flex items-baseline justify-between gap-1">
-                  <span className="text-[19px] font-bold">{c.fit}%</span>
-                  {c.fit === best && <span className="text-[11px] font-bold" style={{ color: "var(--v-accent)" }}>Top fit</span>}
-                </div>
-                <div className="mt-1"><Availability code={c.availability_code} short /></div>
-              </button>
-            ))}
-          </div>
-
-          <MobileCompareCard label="Why">
-            {people.map((c) => (
-              <div key={c.employee_id} className="flex items-start gap-2.5">
-                <Avatar c={c} size={26} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[12px] font-bold">{first(c.name)}</div>
-                  <p className="text-[13px] leading-5" style={ink2}>{whyLine(c)}</p>
-                </div>
+          <div className="grid grid-cols-2 gap-2.5">{people.map((c) => <div key={c.employee_id}>{head(c)}</div>)}</div>
+          {visible.map((r) => (
+            <div key={r.key} className="rounded-[var(--v-radius)] border bg-white p-4" style={line}>
+              <div className="flex items-baseline justify-between gap-2 border-b pb-2" style={line}>
+                <div className="text-[14px] font-bold">{r.label}</div>
+                {r.sub && <div className="text-[11px] font-semibold uppercase" style={ink3}>{r.sub}</div>}
               </div>
-            ))}
-          </MobileCompareCard>
-
-          {reqs.map((r) => (
-            <MobileCompareCard key={r.id} label={r.label} sub={r.importance === "must" ? "Must have" : "Nice to have"}>
-              {people.map((c) => {
-                const x = c.requirements.find((q) => q.id === r.id);
-                return (
+              <div className="mt-2.5 space-y-2.5">
+                {people.map((c) => (
                   <div key={c.employee_id} className="flex items-start gap-2.5">
-                    <Status s={x?.status ?? "missing"} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12px] font-bold">{first(c.name)}</div>
-                      <div className="text-[13px] leading-5" style={ink2}>{x?.lines[0] || "Not shown"}</div>
-                    </div>
+                    <span className="w-16 shrink-0 truncate pt-0.5 text-[12px] font-bold">{first(c.name)}</span>
+                    <div className="min-w-0 flex-1">{r.cell(c)}</div>
                   </div>
-                );
-              })}
-            </MobileCompareCard>
-          ))}
-
-          <MobileCompareCard label="What to check">
-            {people.map((c) => (
-              <div key={c.employee_id} className="flex items-start gap-2.5">
-                <Avatar c={c} size={26} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[12px] font-bold">{first(c.name)}</div>
-                  <ul className="mt-0.5 space-y-1 text-[13px] leading-5" style={{ color: c.risks.length ? "var(--v-warn)" : "var(--v-ink2)" }}>
-                    {c.risks.length ? c.risks.map((r) => <li key={r.text} className="flex gap-1.5"><CircleAlert size={13} className="mt-0.5 shrink-0" />{r.text}</li>) : <li>Nothing stands out</li>}
-                  </ul>
-                </div>
+                ))}
               </div>
-            ))}
-          </MobileCompareCard>
-
-          <MobileCompareCard label="In short" sub="Written by AI">
-            {people.map((c) => {
-              const e = explanation(c.employee_id);
-              return (
-                <div key={c.employee_id} className="flex items-start gap-2.5">
-                  <Avatar c={c} size={26} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[12px] font-bold">{first(c.name)}</div>
-                    {!e || e === "loading" ? (
-                      <div className="mt-1 space-y-1.5"><div className="shimmer h-3 rounded-full" /><div className="shimmer h-3 w-3/4 rounded-full" /></div>
-                    ) : (
-                      <p className="mt-0.5 text-[13px] leading-5" style={ink2}>
-                        {e.ok ? citedOnce(e.summary ?? "").filter((p) => "t" in p).map((p) => ("t" in p ? p.t : "")).join("").replace(/\s+([.,])/g, "$1") : e.error}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </MobileCompareCard>
+            </div>
+          ))}
         </div>
 
-        {/* Desktop side-by-side grid */}
+        {/* Desktop: side by side */}
         <div className="hidden overflow-x-auto px-6 pb-6 pt-4 md:block">
           <div className="min-w-fit space-y-2">
             <div className="grid gap-3" style={{ gridTemplateColumns: cols }}>
               <div />
-              {people.map((c) => (
-                <button key={c.employee_id} onClick={() => onOpen(c)} className="rounded-[18px] border bg-white p-4 text-left" style={{ borderColor: c.fit === best ? "var(--v-accent)" : "var(--v-line)" }}>
-                  <div className="flex items-center gap-3"><Avatar c={c} size={44} /><div className="min-w-0"><div className="truncate font-bold">{c.name}</div><div className="truncate text-[13px]" style={ink2}>{c.position}</div></div></div>
-                  <div className="mt-3 flex items-center justify-between"><Availability code={c.availability_code} short /><span className="text-[18px] font-bold">{c.fit}%</span></div>
-                  {c.fit === best && <div className="mt-2 text-[12px] font-bold" style={{ color: "var(--v-accent)" }}>Highest match</div>}
-                </button>
-              ))}
+              {people.map((c) => <div key={c.employee_id}>{head(c)}</div>)}
             </div>
-            <Row cols={cols} label="Why">{people.map((c) => <p key={c.employee_id} className="text-[14px] leading-6">{whyLine(c)}</p>)}</Row>
-            {reqs.map((r) => (
-              <Row key={r.id} cols={cols} label={r.label} sub={r.importance === "must" ? "Must have" : "Nice to have"}>
-                {people.map((c) => {
-                  const x = c.requirements.find((q) => q.id === r.id);
-                  return <div key={c.employee_id} className="flex gap-2.5"><Status s={x?.status ?? "missing"} /><span className="text-[13px] leading-5" style={ink2}>{x?.lines[0]}</span></div>;
-                })}
-              </Row>
+            {visible.map((r) => (
+              <div key={r.key} className="grid items-start gap-3 rounded-[var(--v-radius)] bg-white px-4 py-3" style={{ gridTemplateColumns: cols }}>
+                <div><div className="text-[14px] font-bold">{r.label}</div>{r.sub && <div className="text-[12px]" style={ink3}>{r.sub}</div>}</div>
+                {people.map((c) => <div key={c.employee_id}>{r.cell(c)}</div>)}
+              </div>
             ))}
-            <Row cols={cols} label="What to check">
-              {people.map((c) => (
-                <ul key={c.employee_id} className="space-y-1 text-[13px] leading-5" style={{ color: "var(--v-warn)" }}>
-                  {c.risks.length ? c.risks.map((r) => <li key={r.text} className="flex gap-1.5"><CircleAlert size={13} className="mt-0.5 shrink-0" />{r.text}</li>) : <li style={ink2}>Nothing stands out</li>}
-                </ul>
-              ))}
-            </Row>
-            <Row cols={cols} label="In short" sub="Written by AI">
-              {people.map((c) => {
-                const e = explanation(c.employee_id);
-                if (!e || e === "loading") return <div key={c.employee_id} className="space-y-1.5"><div className="shimmer h-3 rounded-full" /><div className="shimmer h-3 w-3/4 rounded-full" /></div>;
-                return <p key={c.employee_id} className="text-[13px] leading-5">{e.ok ? citedOnce(e.summary ?? "").filter((p) => "t" in p).map((p) => ("t" in p ? p.t : "")).join("").replace(/\s+([.,])/g, "$1") : e.error}</p>;
-              })}
-            </Row>
           </div>
         </div>
+        {onlyDiff && hiddenCount > 0 && (
+          <p className="px-6 pb-6 text-center text-[13px]" style={ink3}>
+            {hiddenCount} row{hiddenCount > 1 ? "s" : ""} where everyone is the same {hiddenCount > 1 ? "are" : "is"} hidden ·{" "}
+            <button className="font-semibold underline" onClick={() => setOnlyDiff(false)}>show all</button>
+          </p>
+        )}
       </div>
-    </div>
-  );
-}
-
-function MobileCompareCard({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-[18px] border bg-white p-4" style={line}>
-      <div className="flex items-baseline justify-between gap-2 border-b pb-2.5" style={line}>
-        <div className="text-[14px] font-bold">{label}</div>
-        {sub && <div className="text-[11px] font-semibold uppercase tracking-wide" style={ink2}>{sub}</div>}
-      </div>
-      <div className="mt-3 space-y-3">{children}</div>
-    </div>
-  );
-}
-
-function Row({ label, sub, cols, children }: { label: string; sub?: string; cols: string; children: React.ReactNode }) {
-  return (
-    <div className="grid items-start gap-3 rounded-[18px] bg-white p-4" style={{ gridTemplateColumns: cols }}>
-      <div><div className="text-[14px] font-bold">{label}</div>{sub && <div className="text-[12px]" style={ink2}>{sub}</div>}</div>
-      {children}
     </div>
   );
 }

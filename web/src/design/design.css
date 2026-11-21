@@ -18,7 +18,8 @@
   --v-accent: #0072BC; --v-accent-deep: #003B6F; --v-accent-soft: #E1EDF8; --v-on-accent: #FFFFFF;
   --v-cyan: #5BC0EB; --v-cyan-soft: #E6F6FD;
   --v-good: #0E7C6B; --v-good-soft: #E2F5F0; --v-warn: #A4541A; --v-warn-soft: #FCEBDD; --v-bad: #B9442A; --v-bad-soft: #FBE6DF;
-  --v-sun: #5BC0EB; --v-sun-soft: #E1EDF8; --v-radius: 18px;
+  --v-sun: #5BC0EB; --v-sun-soft: #E1EDF8; --v-radius: 8px;
+  --v-gold: #9A6400; --v-gold-soft: #FFF3D1; --v-chip: #EDF2F8; --v-ink3: #7F93AA;
   --v-display: "Plus Jakarta Sans", system-ui, sans-serif; --v-body: "Plus Jakarta Sans", system-ui, sans-serif; --v-num: "Plus Jakarta Sans", system-ui, sans-serif;
 }
 .v-spotlight {
